@@ -1,0 +1,22 @@
+server:
+    host: 0.0.0.0
+    port: 80
+singbox:
+    bin_path: /usr/bin/sing-box
+    config_dir: /path/to/configs/singbox
+    log_dir: /path/to/logs/singbox
+database:
+    path: /path/to/data/manager.db
+logging:
+    level: info
+    format: text
+auth:
+    enabled: true
+    password: "your-password-here"
+mikrotik:
+    enabled: false
+    address: 192.168.1.1
+    username: admin
+    password: your-mikrotik-password
+    port: 8728
+    routing_table: main

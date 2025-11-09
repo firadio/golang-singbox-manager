@@ -36,7 +36,8 @@ Thumbs.db
 *.bak
 
 # Config files with sensitive data (keep template)
-# configs/config.yaml
+configs/config.yaml
+configs/singbox/*.json
 
 # Go workspace file
 go.work
