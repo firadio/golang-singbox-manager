@@ -33,7 +33,41 @@ func (h *NodeHandler) GetAllNodes(c *gin.Context) {
 		return
 	}
 
-	Success(c, nodes)
+	// 获取所有节点的统计信息
+	statsMap, err := storage.GetAllNodeStats()
+	if err != nil {
+		log.Warnf("Failed to get node stats: %v", err)
+		// 即使获取统计失败，也返回节点信息
+		Success(c, nodes)
+		return
+	}
+
+	// 构建包含统计信息的节点数据
+	type NodeWithStats struct {
+		*storage.ProxyNode
+		Latency   int  `json:"latency"`
+		Available bool `json:"available"`
+	}
+
+	nodesWithStats := make([]NodeWithStats, len(nodes))
+	for i, node := range nodes {
+		stats, ok := statsMap[node.ID]
+		if ok {
+			nodesWithStats[i] = NodeWithStats{
+				ProxyNode: node,
+				Latency:   stats.Latency,
+				Available: stats.Available,
+			}
+		} else {
+			nodesWithStats[i] = NodeWithStats{
+				ProxyNode: node,
+				Latency:   0,
+				Available: false,
+			}
+		}
+	}
+
+	Success(c, nodesWithStats)
 }
 
 // GetNode 获取单个节点

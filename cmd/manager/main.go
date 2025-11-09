@@ -6,9 +6,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/firadio/golang-singbox-manager/internal/api"
 	"github.com/firadio/golang-singbox-manager/internal/config"
+	"github.com/firadio/golang-singbox-manager/internal/health"
 	"github.com/firadio/golang-singbox-manager/internal/mikrotik"
 	"github.com/firadio/golang-singbox-manager/internal/network"
 	"github.com/firadio/golang-singbox-manager/internal/singbox"
@@ -97,6 +99,12 @@ func main() {
 	if err := recoverRoutingRules(rtManager); err != nil {
 		log.Errorf("Failed to recover routing rules: %v", err)
 	}
+
+	// 启动健康检查器
+	log.Info("Starting health checker...")
+	healthChecker := health.NewChecker(30 * time.Second)
+	healthChecker.Start()
+	defer healthChecker.Stop()
 
 	// 启动 API 服务器
 	log.Info("Starting API server...")
