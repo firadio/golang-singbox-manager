@@ -176,6 +176,37 @@
             color: #92400e;
         }
 
+        /* 延迟显示样式 */
+        .latency {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-align: center;
+            min-width: 60px;
+        }
+
+        .latency-excellent {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .latency-good {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .latency-poor {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .latency-unavailable {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
@@ -588,6 +619,7 @@
                         <th>服务器</th>
                         <th>TUN</th>
                         <th>路由表</th>
+                        <th>延迟</th>
                         <th>状态</th>
                         <th>操作</th>
                     </tr>
@@ -1232,7 +1264,7 @@
                 table.style.display = 'table';
 
                 if (!data.data || data.data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #9ca3af;">暂无节点</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #9ca3af;">暂无节点</td></tr>';
                     return;
                 }
 
@@ -1243,6 +1275,23 @@
                     } catch (e) {}
                     const server = config.server || '-';
 
+                    // 计算延迟显示
+                    let latencyHtml = '';
+                    if (node.status !== 'running') {
+                        latencyHtml = '<span class="latency latency-unavailable">-</span>';
+                    } else if (!node.available) {
+                        latencyHtml = '<span class="latency latency-unavailable">离线</span>';
+                    } else {
+                        const latency = node.latency || 0;
+                        let latencyClass = 'latency-excellent';
+                        if (latency > 300) {
+                            latencyClass = 'latency-poor';
+                        } else if (latency > 100) {
+                            latencyClass = 'latency-good';
+                        }
+                        latencyHtml = `<span class="latency ${latencyClass}">${latency}ms</span>`;
+                    }
+
                     return `
                     <tr>
                         <td>${node.id}</td>
@@ -1251,6 +1300,7 @@
                         <td>${server}</td>
                         <td>${node.tun_name || '-'}</td>
                         <td><code>${node.table_id}</code></td>
+                        <td>${latencyHtml}</td>
                         <td><span class="status status-${node.status}">${node.status}</span></td>
                         <td>
                             <div class="actions">
