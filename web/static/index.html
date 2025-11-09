@@ -443,9 +443,101 @@
             opacity: 0.8;
             margin-top: 30px;
         }
+
+        /* 通知系统 */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            min-width: 300px;
+            max-width: 400px;
+            padding: 15px 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.toast-success {
+            border-left: 4px solid #10b981;
+        }
+
+        .toast.toast-error {
+            border-left: 4px solid #ef4444;
+        }
+
+        .toast.toast-info {
+            border-left: 4px solid #3b82f6;
+        }
+
+        .toast.toast-warning {
+            border-left: 4px solid #f59e0b;
+        }
+
+        .toast-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .toast-success .toast-icon { color: #10b981; }
+        .toast-error .toast-icon { color: #ef4444; }
+        .toast-info .toast-icon { color: #3b82f6; }
+        .toast-warning .toast-icon { color: #f59e0b; }
+
+        .toast-content {
+            flex: 1;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #1f2937;
+        }
+
+        .toast-message {
+            font-size: 14px;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+
+        .toast-close {
+            cursor: pointer;
+            color: #9ca3af;
+            font-size: 20px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .toast-close:hover {
+            color: #4b5563;
+        }
     </style>
 </head>
 <body>
+    <!-- 通知容器 -->
+    <div id="toast-container" class="toast-container"></div>
+
     <div class="container">
         <header>
             <h1>🚀 Sing-Box Manager</h1>
@@ -817,7 +909,7 @@
 
                 <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                     <button type="button" class="btn" onclick="closeModal('createNodeModal')">取消</button>
-                    <button type="submit" class="btn btn-success">创建</button>
+                    <button type="submit" class="btn btn-success" id="node-submit-btn">创建</button>
                 </div>
             </form>
         </div>
@@ -863,6 +955,46 @@
     <script>
         const API_BASE = '/api';
         let currentConfigMode = 'form';
+
+        // ===== 通知系统 =====
+        function showToast(message, type = 'info', title = '', duration = 3000) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            const icons = {
+                success: '✓',
+                error: '✕',
+                warning: '⚠',
+                info: 'ℹ'
+            };
+
+            const titles = {
+                success: title || '成功',
+                error: title || '错误',
+                warning: title || '警告',
+                info: title || '提示'
+            };
+
+            toast.innerHTML = `
+                <div class="toast-icon">${icons[type]}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${titles[type]}</div>
+                    <div class="toast-message">${message}</div>
+                </div>
+                <div class="toast-close" onclick="this.parentElement.remove()">×</div>
+            `;
+
+            container.appendChild(toast);
+
+            // 自动移除
+            if (duration > 0) {
+                setTimeout(() => {
+                    toast.style.animation = 'slideIn 0.3s ease-out reverse';
+                    setTimeout(() => toast.remove(), 300);
+                }, duration);
+            }
+        }
 
         // ===== 认证相关 =====
 
@@ -1226,6 +1358,7 @@
         async function showCreateNodeModal() {
             // 设置为创建模式
             document.getElementById('node-modal-title').textContent = '创建节点';
+            document.getElementById('node-submit-btn').textContent = '创建';
             document.getElementById('node-id').value = '';
             currentConfigMode = 'form';
 
@@ -1271,7 +1404,7 @@
                     data.data.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
                 document.getElementById('createRuleModal').classList.add('active');
             } else {
-                alert('请先创建至少一个节点');
+                showToast('请先创建至少一个节点', 'warning');
             }
         }
 
@@ -1426,7 +1559,7 @@
                 try {
                     config = JSON.parse(configText);
                 } catch {
-                    alert('JSON 格式错误，请检查配置');
+                    showToast('JSON 格式错误，请检查配置', 'error');
                     return;
                 }
             }
@@ -1454,12 +1587,15 @@
 
             const data = await res.json();
             if (data.code === 0) {
-                alert(isEdit ? '节点更新成功！' : '节点创建成功！ID: ' + data.data.id);
+                showToast(
+                    isEdit ? '节点已更新，请重启节点使配置生效' : `节点创建成功！ID: ${data.data.id}`,
+                    'success'
+                );
                 closeModal('createNodeModal');
                 loadNodes();
                 loadOverview();
             } else {
-                alert((isEdit ? '更新' : '创建') + '失败: ' + data.message);
+                showToast((isEdit ? '更新' : '创建') + '失败: ' + data.message, 'error');
             }
         }
 
@@ -1467,11 +1603,11 @@
             const res = await authFetch(`${API_BASE}/nodes/${id}/start`, { method: 'POST' });
             const data = await res.json();
             if (data.code === 0) {
-                alert('节点启动成功');
+                showToast('节点启动成功', 'success');
                 loadNodes();
                 loadOverview();
             } else {
-                alert('启动失败: ' + data.message);
+                showToast('启动失败: ' + data.message, 'error');
             }
         }
 
@@ -1479,22 +1615,27 @@
             const res = await authFetch(`${API_BASE}/nodes/${id}/stop`, { method: 'POST' });
             const data = await res.json();
             if (data.code === 0) {
-                alert('节点已停止');
+                showToast('节点已停止', 'success');
                 loadNodes();
                 loadOverview();
             } else {
-                alert('停止失败: ' + data.message);
+                showToast('停止失败: ' + data.message, 'error');
             }
         }
 
         async function restartNode(id) {
+            showToast('正在重启节点，请稍候...', 'info', '', 0);
             const res = await authFetch(`${API_BASE}/nodes/${id}/restart`, { method: 'POST' });
             const data = await res.json();
+
+            // 清除"正在重启"提示
+            document.getElementById('toast-container').innerHTML = '';
+
             if (data.code === 0) {
-                alert('节点重启成功');
+                showToast('节点重启成功', 'success');
                 loadNodes();
             } else {
-                alert('重启失败: ' + data.message);
+                showToast('重启失败: ' + data.message, 'error');
             }
         }
 
@@ -1504,11 +1645,11 @@
             const res = await authFetch(`${API_BASE}/nodes/${id}`, { method: 'DELETE' });
             const data = await res.json();
             if (data.code === 0) {
-                alert('节点已删除');
+                showToast('节点已删除', 'success');
                 loadNodes();
                 loadOverview();
             } else {
-                alert('删除失败: ' + data.message);
+                showToast('删除失败: ' + data.message, 'error');
             }
         }
 
@@ -1523,6 +1664,7 @@
 
                     // 设置为编辑模式
                     document.getElementById('node-modal-title').textContent = '编辑节点';
+                    document.getElementById('node-submit-btn').textContent = '保存';
                     document.getElementById('node-id').value = node.id;
 
                     // 默认使用表单模式
@@ -1560,11 +1702,11 @@
                     // 显示模态框
                     document.getElementById('createNodeModal').classList.add('active');
                 } else {
-                    alert('获取节点信息失败: ' + data.message);
+                    showToast('获取节点信息失败: ' + data.message, 'error');
                 }
             } catch (e) {
                 console.error('编辑节点失败:', e);
-                alert('获取节点信息失败');
+                showToast('获取节点信息失败', 'error');
             }
         }
 
@@ -1597,12 +1739,12 @@
 
             const data = await res.json();
             if (data.code === 0) {
-                alert(isEdit ? '规则更新成功！' : '规则创建成功！');
+                showToast(isEdit ? '规则更新成功' : '规则创建成功', 'success');
                 closeModal('createRuleModal');
                 loadRules();
                 loadOverview();
             } else {
-                alert((isEdit ? '更新' : '创建') + '失败: ' + data.message);
+                showToast((isEdit ? '更新' : '创建') + '失败: ' + data.message, 'error');
             }
         }
 
@@ -1610,10 +1752,10 @@
             const res = await authFetch(`${API_BASE}/rules/${id}/enable`, { method: 'POST' });
             const data = await res.json();
             if (data.code === 0) {
-                alert('规则已启用');
+                showToast('规则已启用', 'success');
                 loadRules();
             } else {
-                alert('启用失败: ' + data.message);
+                showToast('启用失败: ' + data.message, 'error');
             }
         }
 
@@ -1621,10 +1763,10 @@
             const res = await authFetch(`${API_BASE}/rules/${id}/disable`, { method: 'POST' });
             const data = await res.json();
             if (data.code === 0) {
-                alert('规则已禁用');
+                showToast('规则已禁用', 'success');
                 loadRules();
             } else {
-                alert('禁用失败: ' + data.message);
+                showToast('禁用失败: ' + data.message, 'error');
             }
         }
 
@@ -1635,7 +1777,7 @@
                 const ruleData = await ruleRes.json();
 
                 if (ruleData.code !== 0 || !ruleData.data) {
-                    alert('获取规则信息失败: ' + ruleData.message);
+                    showToast('获取规则信息失败: ' + ruleData.message, 'error');
                     return;
                 }
 
@@ -1646,7 +1788,7 @@
                 const nodesData = await nodesRes.json();
 
                 if (!nodesData.data || nodesData.data.length === 0) {
-                    alert('没有可用的节点');
+                    showToast('没有可用的节点', 'warning');
                     return;
                 }
 
@@ -1670,7 +1812,7 @@
                 document.getElementById('createRuleModal').classList.add('active');
             } catch (e) {
                 console.error('编辑规则失败:', e);
-                alert('获取规则信息失败');
+                showToast('获取规则信息失败', 'error');
             }
         }
 
@@ -1680,11 +1822,11 @@
             const res = await authFetch(`${API_BASE}/rules/${id}`, { method: 'DELETE' });
             const data = await res.json();
             if (data.code === 0) {
-                alert('规则已删除');
+                showToast('规则已删除', 'success');
                 loadRules();
                 loadOverview();
             } else {
-                alert('删除失败: ' + data.message);
+                showToast('删除失败: ' + data.message, 'error');
             }
         }
 
@@ -1809,13 +1951,13 @@
                             showRestartOverlay('正在重启服务，请稍候...', currentPort, 4);
                         }
                     } else {
-                        alert('设置保存成功！');
+                        showToast('设置保存成功', 'success');
                     }
                 } else {
-                    alert('保存失败: ' + data.message);
+                    showToast('保存失败: ' + data.message, 'error');
                 }
             } catch (error) {
-                alert('保存失败: ' + error.message);
+                showToast('保存失败: ' + error.message, 'error');
             }
         }
 
@@ -1826,7 +1968,7 @@
             const password = document.getElementById('settings-mikrotik-password').value;
 
             if (!address || !port || !username) {
-                alert('请填写Mikrotik地址、端口和用户名');
+                showToast('请填写Mikrotik地址、端口和用户名', 'warning');
                 return;
             }
 
@@ -1846,12 +1988,12 @@
 
                 const data = await res.json();
                 if (data.code === 0) {
-                    alert('连接成功！');
+                    showToast('Mikrotik连接成功', 'success');
                 } else {
-                    alert('连接失败: ' + data.message);
+                    showToast('连接失败: ' + data.message, 'error');
                 }
             } catch (error) {
-                alert('连接失败: ' + error.message);
+                showToast('连接失败: ' + error.message, 'error');
             }
         }
 
