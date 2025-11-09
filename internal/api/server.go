@@ -19,6 +19,7 @@ type Server struct {
 	nodeHandler     *handlers.NodeHandler
 	ruleHandler     *handlers.RuleHandler
 	settingsHandler *handlers.SettingsHandler
+	logHandler      *handlers.LogHandler
 	config          *config.Config
 	host            string
 	port            int
@@ -43,6 +44,7 @@ func NewServer(cfg *config.Config, configPath string, sbManager *singbox.Manager
 		nodeHandler:     handlers.NewNodeHandler(sbManager, rtManager),
 		ruleHandler:     handlers.NewRuleHandler(rtManager),
 		settingsHandler: handlers.NewSettingsHandler(cfg, configPath, mtClient),
+		logHandler:      handlers.NewLogHandler(cfg.SingBox.LogDir),
 		config:          cfg,
 		host:            cfg.Server.Host,
 		port:            cfg.Server.Port,
@@ -82,6 +84,9 @@ func (s *Server) setupRoutes() {
 		nodes.POST("/:id/stop", s.nodeHandler.StopNode)
 		nodes.POST("/:id/restart", s.nodeHandler.RestartNode)
 		nodes.GET("/:id/status", s.nodeHandler.GetNodeStatus)
+		nodes.GET("/:id/logs", s.logHandler.GetNodeLogs)
+		nodes.POST("/:id/logs/clear", s.logHandler.ClearNodeLogs)
+		nodes.GET("/:id/logs/search", s.logHandler.SearchNodeLogs)
 	}
 
 	// 路由规则 API

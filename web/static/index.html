@@ -563,6 +563,80 @@
         .toast-close:hover {
             color: #4b5563;
         }
+
+        /* 日志查看器样式 */
+        .log-viewer {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 13px;
+            max-height: 500px;
+            overflow-y: auto;
+            margin: 15px 0;
+            line-height: 1.5;
+        }
+
+        .log-line {
+            margin: 2px 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .log-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .log-controls input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .log-controls select {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .log-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .log-modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 1000px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-sm-icon {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
@@ -984,6 +1058,49 @@
         </div>
     </div>
 
+    <!-- 日志查看器模态框 -->
+    <div id="logViewerModal" class="modal">
+        <div class="log-modal-content">
+            <div class="modal-header">
+                <h2 id="log-modal-title">节点日志</h2>
+                <span class="close" onclick="closeModal('logViewerModal')">&times;</span>
+            </div>
+
+            <div class="log-controls">
+                <select id="log-lines">
+                    <option value="50">最近50行</option>
+                    <option value="100" selected>最近100行</option>
+                    <option value="200">最近200行</option>
+                    <option value="500">最近500行</option>
+                    <option value="1000">最近1000行</option>
+                </select>
+
+                <input type="text" id="log-search" placeholder="搜索关键词..." />
+
+                <div class="btn-group">
+                    <button class="btn btn-sm-icon" onclick="refreshLogs()" title="刷新日志">
+                        <span>⟳ 刷新</span>
+                    </button>
+                    <button class="btn btn-sm-icon btn-warning" onclick="clearNodeLogs()" title="清空日志">
+                        <span>🗑 清空</span>
+                    </button>
+                    <button class="btn btn-sm-icon btn-success" onclick="downloadLogs()" title="下载日志">
+                        <span>↓ 下载</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="log-info">
+                <span id="log-count">加载中...</span>
+                <span id="log-updated">-</span>
+            </div>
+
+            <div class="log-viewer" id="log-content">
+                <div style="text-align: center; color: #888;">加载中...</div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = '/api';
         let currentConfigMode = 'form';
@@ -1309,6 +1426,7 @@
                                     : `<button class="btn btn-sm btn-success" onclick="startNode(${node.id})">启动</button>`
                                 }
                                 <button class="btn btn-sm" onclick="restartNode(${node.id})">重启</button>
+                                <button class="btn btn-sm" onclick="viewNodeLogs(${node.id}, '${node.name}')">查看日志</button>
                                 <button class="btn btn-sm" onclick="editNode(${node.id})">编辑</button>
                                 <button class="btn btn-sm btn-danger" onclick="deleteNode(${node.id}, '${node.name}')">删除</button>
                             </div>
@@ -2061,6 +2179,212 @@
             // 显示过渡页面
             const currentPort = parseInt(window.location.port) || 80;
             showRestartOverlay('正在重启服务，请稍候...', currentPort, 5);
+        }
+
+        // ===== 日志查看器功能 =====
+        let currentLogNodeId = null;
+        let currentLogNodeName = '';
+        let logAutoRefreshInterval = null;
+
+        // 打开日志查看器
+        async function viewNodeLogs(nodeId, nodeName) {
+            currentLogNodeId = nodeId;
+            currentLogNodeName = nodeName;
+
+            document.getElementById('log-modal-title').textContent = `节点日志 - ${nodeName}`;
+            document.getElementById('logViewerModal').classList.add('active');
+
+            // 加载日志
+            await loadLogs();
+
+            // 监听行数变化
+            document.getElementById('log-lines').addEventListener('change', loadLogs);
+
+            // 监听搜索（使用防抖）
+            let searchTimeout;
+            document.getElementById('log-search').addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    if (e.target.value.trim()) {
+                        searchLogs(e.target.value.trim());
+                    } else {
+                        loadLogs();
+                    }
+                }, 500);
+            });
+        }
+
+        // 加载日志
+        async function loadLogs() {
+            if (!currentLogNodeId) return;
+
+            const lines = document.getElementById('log-lines').value;
+            const logContent = document.getElementById('log-content');
+            const logCount = document.getElementById('log-count');
+            const logUpdated = document.getElementById('log-updated');
+
+            logContent.innerHTML = '<div style="text-align: center; color: #888;">加载中...</div>';
+
+            try {
+                const data = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs?lines=${lines}`);
+
+                if (data.code === 0) {
+                    const logs = data.data.logs || [];
+
+                    if (logs.length === 0) {
+                        logContent.innerHTML = '<div style="text-align: center; color: #888;">暂无日志</div>';
+                        logCount.textContent = '共 0 行';
+                    } else {
+                        // 移除 ANSI 颜色代码并显示日志
+                        logContent.innerHTML = logs.map(log => {
+                            // 移除 ANSI 转义序列
+                            const cleanLog = log.replace(/\x1b\[[0-9;]*m/g, '');
+                            return `<div class="log-line">${escapeHtml(cleanLog)}</div>`;
+                        }).join('');
+
+                        // 滚动到底部
+                        logContent.scrollTop = logContent.scrollHeight;
+
+                        logCount.textContent = `共 ${logs.length} 行`;
+                    }
+
+                    logUpdated.textContent = `最后更新: ${new Date().toLocaleTimeString()}`;
+                } else {
+                    logContent.innerHTML = `<div style="text-align: center; color: #ef4444;">加载失败: ${data.message}</div>`;
+                }
+            } catch (error) {
+                logContent.innerHTML = `<div style="text-align: center; color: #ef4444;">加载失败: ${error.message}</div>`;
+            }
+        }
+
+        // 搜索日志
+        async function searchLogs(keyword) {
+            if (!currentLogNodeId || !keyword) return;
+
+            const logContent = document.getElementById('log-content');
+            const logCount = document.getElementById('log-count');
+            const logUpdated = document.getElementById('log-updated');
+
+            logContent.innerHTML = '<div style="text-align: center; color: #888;">搜索中...</div>';
+
+            try {
+                const data = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs/search?keyword=${encodeURIComponent(keyword)}&max_lines=1000`);
+
+                if (data.code === 0) {
+                    const logs = data.data.logs || [];
+
+                    if (logs.length === 0) {
+                        logContent.innerHTML = '<div style="text-align: center; color: #888;">未找到匹配的日志</div>';
+                        logCount.textContent = '共 0 行';
+                    } else {
+                        logContent.innerHTML = logs.map(log => {
+                            const cleanLog = log.replace(/\x1b\[[0-9;]*m/g, '');
+                            // 高亮显示关键词
+                            const highlighted = cleanLog.replace(
+                                new RegExp(`(${escapeRegExp(keyword)})`, 'gi'),
+                                '<span style="background: yellow; color: black;">$1</span>'
+                            );
+                            return `<div class="log-line">${highlighted}</div>`;
+                        }).join('');
+
+                        logContent.scrollTop = logContent.scrollHeight;
+                        logCount.textContent = `找到 ${logs.length} 行`;
+                    }
+
+                    logUpdated.textContent = `搜索: "${keyword}" - ${new Date().toLocaleTimeString()}`;
+                } else {
+                    logContent.innerHTML = `<div style="text-align: center; color: #ef4444;">搜索失败: ${data.message}</div>`;
+                }
+            } catch (error) {
+                logContent.innerHTML = `<div style="text-align: center; color: #ef4444;">搜索失败: ${error.message}</div>`;
+            }
+        }
+
+        // 刷新日志
+        function refreshLogs() {
+            const searchKeyword = document.getElementById('log-search').value.trim();
+            if (searchKeyword) {
+                searchLogs(searchKeyword);
+            } else {
+                loadLogs();
+            }
+        }
+
+        // 清空日志
+        async function clearNodeLogs() {
+            if (!currentLogNodeId) return;
+
+            if (!confirm(`确定要清空节点 "${currentLogNodeName}" 的所有日志吗？\n此操作不可恢复！`)) {
+                return;
+            }
+
+            try {
+                const data = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs/clear`, {
+                    method: 'POST'
+                });
+
+                if (data.code === 0) {
+                    showToast('日志已清空', 'success');
+                    loadLogs();
+                } else {
+                    showToast('清空失败: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showToast('清空失败: ' + error.message, 'error');
+            }
+        }
+
+        // 下载日志
+        async function downloadLogs() {
+            if (!currentLogNodeId) return;
+
+            try {
+                const lines = document.getElementById('log-lines').value;
+                const response = await fetch(
+                    `${API_BASE}/nodes/${currentLogNodeId}/logs?lines=${lines}`,
+                    {
+                        headers: {
+                            'X-Auth-Password': sessionStorage.getItem('auth_password') || ''
+                        }
+                    }
+                );
+
+                const data = await response.json();
+
+                if (data.code === 0 && data.data.logs) {
+                    const logs = data.data.logs;
+                    const cleanLogs = logs.map(log => log.replace(/\x1b\[[0-9;]*m/g, '')).join('\n');
+
+                    // 创建下载
+                    const blob = new Blob([cleanLogs], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `node_${currentLogNodeId}_${currentLogNodeName}_${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    showToast('日志已下载', 'success');
+                } else {
+                    showToast('下载失败', 'error');
+                }
+            } catch (error) {
+                showToast('下载失败: ' + error.message, 'error');
+            }
+        }
+
+        // HTML转义函数
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 正则转义函数
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
 
         // 页面加载时初始化

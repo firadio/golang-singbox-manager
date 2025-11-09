@@ -8,7 +8,7 @@
         "tag": "dns",
         "type": "tls",
         "server": "1.0.0.1",
-        "detour": "node-1"
+        "detour": "node-3"
       }
     ]
   },
@@ -22,18 +22,28 @@
         "protocol": "dns"
       }
     ],
-    "final": "node-1"
+    "final": "node-3"
   },
   "inbounds": [
     {
       "type": "tun",
-      "interface_name": "tun1",
+      "interface_name": "tun3",
       "address": [
-        "172.18.0.1/30"
+        "172.18.0.9/30"
       ]
     }
   ],
   "outbounds": [
+    {
+      "password": "65432",
+      "server": "107.151.209.156",
+      "server_port": 65480,
+      "tag": "node-3",
+      "type": "socks",
+      "udp_over_tcp": false,
+      "username": "65432",
+      "version": "5"
+    },
     {
       "flow": "xtls-rprx-vision",
       "server": "43.161.250.190",
