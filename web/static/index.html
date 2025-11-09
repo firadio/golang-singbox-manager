@@ -2185,6 +2185,24 @@
         let currentLogNodeId = null;
         let currentLogNodeName = '';
         let logAutoRefreshInterval = null;
+        let logSearchTimeout = null;
+
+        // 日志行数变化处理器
+        function handleLogLinesChange() {
+            loadLogs();
+        }
+
+        // 日志搜索处理器
+        function handleLogSearchInput(e) {
+            clearTimeout(logSearchTimeout);
+            logSearchTimeout = setTimeout(() => {
+                if (e.target.value.trim()) {
+                    searchLogs(e.target.value.trim());
+                } else {
+                    loadLogs();
+                }
+            }, 500);
+        }
 
         // 打开日志查看器
         async function viewNodeLogs(nodeId, nodeName) {
@@ -2192,26 +2210,25 @@
             currentLogNodeName = nodeName;
 
             document.getElementById('log-modal-title').textContent = `节点日志 - ${nodeName}`;
+
+            // 清空搜索框
+            document.getElementById('log-search').value = '';
+
+            // 移除旧的事件监听器并重新绑定
+            const logLinesSelect = document.getElementById('log-lines');
+            const logSearchInput = document.getElementById('log-search');
+
+            logLinesSelect.removeEventListener('change', handleLogLinesChange);
+            logSearchInput.removeEventListener('input', handleLogSearchInput);
+
+            logLinesSelect.addEventListener('change', handleLogLinesChange);
+            logSearchInput.addEventListener('input', handleLogSearchInput);
+
+            // 显示模态框
             document.getElementById('logViewerModal').classList.add('active');
 
             // 加载日志
             await loadLogs();
-
-            // 监听行数变化
-            document.getElementById('log-lines').addEventListener('change', loadLogs);
-
-            // 监听搜索（使用防抖）
-            let searchTimeout;
-            document.getElementById('log-search').addEventListener('input', (e) => {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => {
-                    if (e.target.value.trim()) {
-                        searchLogs(e.target.value.trim());
-                    } else {
-                        loadLogs();
-                    }
-                }, 500);
-            });
         }
 
         // 加载日志
@@ -2226,7 +2243,8 @@
             logContent.innerHTML = '<div style="text-align: center; color: #888;">加载中...</div>';
 
             try {
-                const data = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs?lines=${lines}`);
+                const res = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs?lines=${lines}`);
+                const data = await res.json();
 
                 if (data.code === 0) {
                     const logs = data.data.logs || [];
@@ -2268,7 +2286,8 @@
             logContent.innerHTML = '<div style="text-align: center; color: #888;">搜索中...</div>';
 
             try {
-                const data = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs/search?keyword=${encodeURIComponent(keyword)}&max_lines=1000`);
+                const res = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs/search?keyword=${encodeURIComponent(keyword)}&max_lines=1000`);
+                const data = await res.json();
 
                 if (data.code === 0) {
                     const logs = data.data.logs || [];
@@ -2319,9 +2338,10 @@
             }
 
             try {
-                const data = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs/clear`, {
+                const res = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs/clear`, {
                     method: 'POST'
                 });
+                const data = await res.json();
 
                 if (data.code === 0) {
                     showToast('日志已清空', 'success');
