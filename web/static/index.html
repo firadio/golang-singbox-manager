@@ -633,6 +633,14 @@
                         </select>
                     </div>
 
+                    <div class="form-group">
+                        <label>中转节点 (Detour)</label>
+                        <select id="node-detour">
+                            <option value="">无（直接连接）</option>
+                        </select>
+                        <p class="hint">选择一个中转节点，流量将通过该节点转发</p>
+                    </div>
+
                     <!-- SOCKS 配置 -->
                     <div id="socks-fields" class="node-type-fields">
                         <div class="form-row">
@@ -792,6 +800,13 @@
                             <option value="vmess">VMess</option>
                             <option value="trojan">Trojan</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label>中转节点 (Detour)</label>
+                        <select id="node-detour-json">
+                            <option value="">无（直接连接）</option>
+                        </select>
+                        <p class="hint">选择一个中转节点，流量将通过该节点转发</p>
                     </div>
                     <div class="form-group">
                         <label>配置 (JSON) *</label>
@@ -1178,8 +1193,37 @@
             }
         }
 
+        // 加载节点列表到detour下拉框
+        async function loadDetourNodes(excludeNodeId = null) {
+            try {
+                const res = await authFetch(`${API_BASE}/nodes`);
+                const data = await res.json();
+
+                const detourSelect = document.getElementById('node-detour');
+                const detourSelectJson = document.getElementById('node-detour-json');
+
+                // 清空现有选项
+                detourSelect.innerHTML = '<option value="">无（直接连接）</option>';
+                detourSelectJson.innerHTML = '<option value="">无（直接连接）</option>';
+
+                if (data.data && data.data.length > 0) {
+                    data.data.forEach(node => {
+                        // 排除当前编辑的节点
+                        if (excludeNodeId && node.id === excludeNodeId) {
+                            return;
+                        }
+                        const option = `<option value="${node.id}">${node.name} (ID: ${node.id})</option>`;
+                        detourSelect.innerHTML += option;
+                        detourSelectJson.innerHTML += option;
+                    });
+                }
+            } catch (e) {
+                console.error('加载节点列表失败:', e);
+            }
+        }
+
         // 模态框操作
-        function showCreateNodeModal() {
+        async function showCreateNodeModal() {
             // 设置为创建模式
             document.getElementById('node-modal-title').textContent = '创建节点';
             document.getElementById('node-id').value = '';
@@ -1200,6 +1244,9 @@
             document.getElementById('node-name-json').removeAttribute('required');
             document.getElementById('node-type-json').removeAttribute('required');
             document.getElementById('node-config-json').removeAttribute('required');
+
+            // 加载节点列表到detour下拉框
+            await loadDetourNodes();
 
             updateNodeTypeFields();
             document.getElementById('createNodeModal').classList.add('active');
@@ -1361,16 +1408,20 @@
             const nodeId = document.getElementById('node-id').value;
             const isEdit = nodeId !== '';
 
-            let name, type, config;
+            let name, type, config, detourId;
 
             if (currentConfigMode === 'form') {
                 name = document.getElementById('node-name').value;
                 type = document.getElementById('node-type').value;
                 config = buildConfigFromForm();
+                const detourValue = document.getElementById('node-detour').value;
+                detourId = detourValue ? parseInt(detourValue) : null;
             } else {
                 name = document.getElementById('node-name-json').value;
                 type = document.getElementById('node-type-json').value;
                 const configText = document.getElementById('node-config-json').value;
+                const detourValue = document.getElementById('node-detour-json').value;
+                detourId = detourValue ? parseInt(detourValue) : null;
 
                 try {
                     config = JSON.parse(configText);
@@ -1383,15 +1434,22 @@
             const url = isEdit ? `${API_BASE}/nodes/${nodeId}` : `${API_BASE}/nodes`;
             const method = isEdit ? 'PUT' : 'POST';
 
+            const requestBody = {
+                name,
+                type,
+                config: JSON.stringify(config),
+                enabled: true
+            };
+
+            // 只有当detourId有值时才添加到请求体
+            if (detourId !== null) {
+                requestBody.detour_id = detourId;
+            }
+
             const res = await authFetch(url, {
                 method: method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name,
-                    type,
-                    config: JSON.stringify(config),
-                    enabled: true
-                })
+                body: JSON.stringify(requestBody)
             });
 
             const data = await res.json();
@@ -1480,6 +1538,15 @@
                     document.getElementById('node-name-json').removeAttribute('required');
                     document.getElementById('node-type-json').removeAttribute('required');
                     document.getElementById('node-config-json').removeAttribute('required');
+
+                    // 加载节点列表（排除当前节点）
+                    await loadDetourNodes(node.id);
+
+                    // 设置detour值
+                    if (node.detour_id) {
+                        document.getElementById('node-detour').value = node.detour_id;
+                        document.getElementById('node-detour-json').value = node.detour_id;
+                    }
 
                     // 填充表单数据
                     document.getElementById('node-name').value = node.name;
