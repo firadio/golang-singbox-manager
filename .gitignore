@@ -1,0 +1,42 @@
+# Binaries
+singbox-manager
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Data directory
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Log files
+logs/*.log
+logs/**/*.log
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.bak
+
+# Config files with sensitive data (keep template)
+# configs/config.yaml
+
+# Go workspace file
+go.work

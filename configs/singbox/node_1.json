@@ -1,0 +1,48 @@
+{
+  "log": {
+    "level": "info"
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns",
+        "type": "tls",
+        "server": "1.0.0.1",
+        "detour": "node-1"
+      }
+    ]
+  },
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      }
+    ],
+    "final": "node-1"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "interface_name": "tun1",
+      "address": [
+        "172.18.0.1/30"
+      ]
+    }
+  ],
+  "outbounds": [
+    {
+      "password": "65432",
+      "server": "216.167.17.1",
+      "server_port": 65432,
+      "tag": "node-1",
+      "type": "socks",
+      "udp_over_tcp": false,
+      "username": "65432",
+      "version": "5"
+    }
+  ]
+}

@@ -1,0 +1,132 @@
+package storage
+
+import (
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	_ "github.com/mattn/go-sqlite3"
+	log "github.com/sirupsen/logrus"
+)
+
+var db *sql.DB
+
+// InitDB 初始化数据库连接
+func InitDB(dbPath string) error {
+	// 确保数据目录存在
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create data directory: %w", err)
+	}
+
+	var err error
+	db, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// 设置连接池参数
+	db.SetMaxOpenConns(1) // SQLite 推荐单连接
+	db.SetMaxIdleConns(1)
+
+	// 测试连接
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	// 执行数据库迁移
+	if err := migrate(); err != nil {
+		return fmt.Errorf("failed to migrate database: %w", err)
+	}
+
+	log.Info("Database initialized successfully")
+	return nil
+}
+
+// CloseDB 关闭数据库连接
+func CloseDB() error {
+	if db != nil {
+		return db.Close()
+	}
+	return nil
+}
+
+// GetDB 获取数据库连接
+func GetDB() *sql.DB {
+	return db
+}
+
+// migrate 执行数据库迁移
+func migrate() error {
+	migrations := []string{
+		// 创建节点表
+		`CREATE TABLE IF NOT EXISTS proxy_nodes (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL UNIQUE,
+			type TEXT NOT NULL,
+			config TEXT NOT NULL,
+			detour_id INTEGER,
+			tun_name TEXT NOT NULL UNIQUE,
+			tun_address TEXT NOT NULL,
+			table_id INTEGER NOT NULL UNIQUE,
+			enabled BOOLEAN DEFAULT 1,
+			status TEXT DEFAULT 'stopped',
+			pid INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (detour_id) REFERENCES proxy_nodes(id) ON DELETE SET NULL
+		)`,
+
+		// 创建路由规则表
+		`CREATE TABLE IF NOT EXISTS routing_rules (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			source_ip TEXT NOT NULL,
+			source_cidr TEXT,
+			node_id INTEGER NOT NULL,
+			priority INTEGER NOT NULL,
+			enabled BOOLEAN DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (node_id) REFERENCES proxy_nodes(id) ON DELETE CASCADE,
+			UNIQUE(source_ip, node_id)
+		)`,
+
+		// 创建节点统计表
+		`CREATE TABLE IF NOT EXISTS node_stats (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			node_id INTEGER NOT NULL,
+			latency INTEGER DEFAULT 0,
+			tx_bytes INTEGER DEFAULT 0,
+			rx_bytes INTEGER DEFAULT 0,
+			last_check DATETIME,
+			available BOOLEAN DEFAULT 0,
+			FOREIGN KEY (node_id) REFERENCES proxy_nodes(id) ON DELETE CASCADE
+		)`,
+
+		// 创建操作日志表
+		`CREATE TABLE IF NOT EXISTS operation_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			operation TEXT NOT NULL,
+			target_type TEXT,
+			target_id INTEGER,
+			details TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+
+		// 创建索引
+		`CREATE INDEX IF NOT EXISTS idx_routing_rules_node_id ON routing_rules(node_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_routing_rules_enabled ON routing_rules(enabled)`,
+		`CREATE INDEX IF NOT EXISTS idx_node_stats_node_id ON node_stats(node_id)`,
+	}
+
+	for _, migration := range migrations {
+		if _, err := db.Exec(migration); err != nil {
+			return fmt.Errorf("migration failed: %w\nSQL: %s", err, migration)
+		}
+	}
+
+	log.Info("Database migration completed")
+	return nil
+}
