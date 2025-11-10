@@ -52,3 +52,16 @@ type OperationLog struct {
 	Details    string    `json:"details,omitempty" db:"details"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 }
+
+// PortMapping 端口映射模型
+type PortMapping struct {
+	ID        int       `json:"id" db:"id"`
+	Name      string    `json:"name" db:"name"`
+	Protocol  string    `json:"protocol" db:"protocol"` // tcp/udp
+	DstPort   int       `json:"dst_port" db:"dst_port"`
+	ToAddress string    `json:"to_address" db:"to_address"`
+	ToPort    int       `json:"to_port" db:"to_port"`
+	Enabled   bool      `json:"enabled" db:"enabled"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}

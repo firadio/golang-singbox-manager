@@ -15,14 +15,16 @@ import (
 
 // Server API 服务器
 type Server struct {
-	router          *gin.Engine
-	nodeHandler     *handlers.NodeHandler
-	ruleHandler     *handlers.RuleHandler
-	settingsHandler *handlers.SettingsHandler
-	logHandler      *handlers.LogHandler
-	config          *config.Config
-	host            string
-	port            int
+	router             *gin.Engine
+	nodeHandler        *handlers.NodeHandler
+	ruleHandler        *handlers.RuleHandler
+	settingsHandler    *handlers.SettingsHandler
+	logHandler         *handlers.LogHandler
+	portMappingHandler *handlers.PortMappingHandler
+	pageHandler        *handlers.PageHandler
+	config             *config.Config
+	host               string
+	port               int
 }
 
 // NewServer 创建 API 服务器
@@ -33,6 +35,19 @@ func NewServer(cfg *config.Config, configPath string, sbManager *singbox.Manager
 	router := gin.New()
 	router.Use(gin.Recovery())
 
+	// 加载模板（每次请求都重新加载，方便开发）
+	router.LoadHTMLGlob("web/templates/**/*")
+
+	// 禁用静态文件缓存，方便开发
+	router.Use(func(c *gin.Context) {
+		if len(c.Request.URL.Path) >= 7 && c.Request.URL.Path[:7] == "/static" {
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+			c.Header("Pragma", "no-cache")
+			c.Header("Expires", "0")
+		}
+		c.Next()
+	})
+
 	// 自定义日志中间件
 	router.Use(func(c *gin.Context) {
 		c.Next()
@@ -40,14 +55,16 @@ func NewServer(cfg *config.Config, configPath string, sbManager *singbox.Manager
 	})
 
 	server := &Server{
-		router:          router,
-		nodeHandler:     handlers.NewNodeHandler(sbManager, rtManager),
-		ruleHandler:     handlers.NewRuleHandler(rtManager),
-		settingsHandler: handlers.NewSettingsHandler(cfg, configPath, mtClient),
-		logHandler:      handlers.NewLogHandler(cfg.SingBox.LogDir),
-		config:          cfg,
-		host:            cfg.Server.Host,
-		port:            cfg.Server.Port,
+		router:             router,
+		nodeHandler:        handlers.NewNodeHandler(sbManager, rtManager),
+		ruleHandler:        handlers.NewRuleHandler(rtManager),
+		settingsHandler:    handlers.NewSettingsHandler(cfg, configPath, mtClient),
+		logHandler:         handlers.NewLogHandler(cfg.SingBox.LogDir),
+		portMappingHandler: handlers.NewPortMappingHandler(mtClient),
+		pageHandler:        handlers.NewPageHandler(),
+		config:             cfg,
+		host:               cfg.Server.Host,
+		port:               cfg.Server.Port,
 	}
 
 	server.setupRoutes()
@@ -101,6 +118,19 @@ func (s *Server) setupRoutes() {
 		rules.POST("/:id/disable", s.ruleHandler.DisableRule)
 	}
 
+	// 端口映射 API
+	portMappings := api.Group("/port-mappings")
+	{
+		portMappings.GET("", s.portMappingHandler.GetAllPortMappings)
+		portMappings.GET("/:id", s.portMappingHandler.GetPortMapping)
+		portMappings.POST("", s.portMappingHandler.CreatePortMapping)
+		portMappings.PUT("/:id", s.portMappingHandler.UpdatePortMapping)
+		portMappings.DELETE("/:id", s.portMappingHandler.DeletePortMapping)
+		portMappings.POST("/:id/enable", s.portMappingHandler.EnablePortMapping)
+		portMappings.POST("/:id/disable", s.portMappingHandler.DisablePortMapping)
+		portMappings.POST("/sync", s.portMappingHandler.SyncPortMappings)
+	}
+
 	// 系统设置 API
 	settings := api.Group("/settings")
 	{
@@ -123,10 +153,25 @@ func (s *Server) setupRoutes() {
 		})
 	})
 
-	// 静态文件服务 (Web UI) - 不需要认证
+	// 静态文件服务 (CSS, JS, 图片等)
 	s.router.Static("/static", "./web/static")
+
+	// 页面路由 - 认证在前端 JavaScript 中处理
+	s.router.GET("/nodes", s.pageHandler.RenderNodes)
+	s.router.GET("/rules", s.pageHandler.RenderRules)
+	s.router.GET("/port-mappings", s.pageHandler.RenderPortMappings)
+	s.router.GET("/settings", s.pageHandler.RenderSettings)
+
+	// 根路径重定向
 	s.router.GET("/", func(c *gin.Context) {
-		c.Redirect(302, "/static/index.html")
+		c.Redirect(302, "/nodes")
+	})
+
+	// 登录页面
+	s.router.GET("/login", func(c *gin.Context) {
+		c.HTML(200, "login", gin.H{
+			"Title": "登录",
+		})
 	})
 }
 

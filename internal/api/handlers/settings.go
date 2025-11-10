@@ -147,6 +147,7 @@ func (h *SettingsHandler) TestMikrotikConnection(c *gin.Context) {
 // Login 登录验证
 func (h *SettingsHandler) Login(c *gin.Context) {
 	var loginData struct {
+		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 
@@ -165,8 +166,11 @@ func (h *SettingsHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// 简单返回成功（实际应该返回token，这里简化处理）
-	Success(c, gin.H{"message": "Login successful"})
+	// 返回 token（简化处理：token 就是密码）
+	Success(c, gin.H{
+		"token":   h.config.Auth.Password,
+		"message": "Login successful",
+	})
 }
 
 // RestartService 重启服务

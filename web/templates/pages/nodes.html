@@ -1,0 +1,931 @@
+{{define "nodes-content"}}
+<!-- 节点列表 -->
+<div class="card">
+    <div id="nodes-loading" class="loading">
+        <div class="loading-spinner"></div>
+        <div>加载中...</div>
+    </div>
+
+    <table id="nodes-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>类型</th>
+                <th>服务器</th>
+                <th>网卡</th>
+                <th>路由表</th>
+                <th>延迟</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="nodes-tbody">
+        </tbody>
+    </table>
+</div>
+
+<!-- 创建/编辑节点模态框 -->
+<div id="createNodeModal" class="modal">
+    <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3 id="node-modal-title">创建节点</h3>
+            <button class="modal-close" onclick="closeModal('createNodeModal')">&times;</button>
+        </div>
+
+        <div class="mode-switch">
+            <label>配置模式：</label>
+            <button type="button" class="switch-btn active" onclick="switchConfigMode('form')">表单模式</button>
+            <button type="button" class="switch-btn" onclick="switchConfigMode('json')">JSON模式</button>
+        </div>
+
+        <form onsubmit="saveNode(event)">
+            <div class="modal-body">
+                <input type="hidden" id="node-id">
+
+                <!-- 表单模式 -->
+                <div id="form-mode" class="form-section active">
+                    <div class="form-group">
+                        <label>节点名称 *</label>
+                        <input type="text" id="node-name-form" placeholder="例如: 香港节点">
+                    </div>
+
+                    <div class="form-group">
+                        <label>节点类型 *</label>
+                        <select id="node-type-form" onchange="updateNodeTypeFields()">
+                            <option value="socks">SOCKS5</option>
+                            <option value="vless">VLESS</option>
+                            <option value="vmess">VMess</option>
+                            <option value="trojan">Trojan</option>
+                        </select>
+                    </div>
+
+                    <!-- SOCKS 配置 -->
+                    <div id="socks-fields" class="node-type-fields">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>服务器地址 *</label>
+                                <input type="text" id="socks-server" placeholder="192.168.1.1">
+                            </div>
+                            <div class="form-group">
+                                <label>端口 *</label>
+                                <input type="number" id="socks-port" placeholder="1080">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>用户名</label>
+                                <input type="text" id="socks-username" placeholder="可选">
+                            </div>
+                            <div class="form-group">
+                                <label>密码</label>
+                                <input type="password" id="socks-password" placeholder="可选">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="socks-udp">
+                                <label>启用 UDP over TCP</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VLESS 配置 -->
+                    <div id="vless-fields" class="node-type-fields" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>服务器地址 *</label>
+                                <input type="text" id="vless-server" placeholder="example.com">
+                            </div>
+                            <div class="form-group">
+                                <label>端口 *</label>
+                                <input type="number" id="vless-port" placeholder="443">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>UUID *</label>
+                            <input type="text" id="vless-uuid" placeholder="a3a8c354-a85c-477b-90f3-dbe08cadf31c">
+                        </div>
+                        <div class="form-group">
+                            <label>Flow</label>
+                            <select id="vless-flow">
+                                <option value="">无</option>
+                                <option value="xtls-rprx-vision">xtls-rprx-vision</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="vless-tls" checked>
+                                <label>启用 TLS</label>
+                            </div>
+                        </div>
+                        <div id="vless-tls-fields">
+                            <div class="form-group">
+                                <label>SNI (Server Name)</label>
+                                <input type="text" id="vless-sni" placeholder="www.example.com">
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="vless-reality">
+                                    <label>启用 Reality</label>
+                                </div>
+                            </div>
+                            <div id="vless-reality-fields" style="display: none;">
+                                <div class="form-group">
+                                    <label>Public Key</label>
+                                    <input type="text" id="vless-pubkey" placeholder="zPM3iLhD0ppwxYWzwiXFhQd1PwXCjFN9u28DbXdy604">
+                                </div>
+                                <div class="form-group">
+                                    <label>Short ID</label>
+                                    <input type="text" id="vless-shortid" placeholder="a2346cd0">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VMess 配置 -->
+                    <div id="vmess-fields" class="node-type-fields" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>服务器地址 *</label>
+                                <input type="text" id="vmess-server" placeholder="example.com">
+                            </div>
+                            <div class="form-group">
+                                <label>端口 *</label>
+                                <input type="number" id="vmess-port" placeholder="443">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>UUID *</label>
+                            <input type="text" id="vmess-uuid" placeholder="a3a8c354-a85c-477b-90f3-dbe08cadf31c">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>加密方式</label>
+                                <select id="vmess-security">
+                                    <option value="auto">auto</option>
+                                    <option value="aes-128-gcm">aes-128-gcm</option>
+                                    <option value="chacha20-poly1305">chacha20-poly1305</option>
+                                    <option value="none">none</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Alter ID</label>
+                                <input type="number" id="vmess-alterid" value="0">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="vmess-tls">
+                                <label>启用 TLS</label>
+                            </div>
+                        </div>
+                        <div id="vmess-tls-fields" style="display: none;">
+                            <div class="form-group">
+                                <label>SNI (Server Name)</label>
+                                <input type="text" id="vmess-sni" placeholder="example.com">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trojan 配置 -->
+                    <div id="trojan-fields" class="node-type-fields" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>服务器地址 *</label>
+                                <input type="text" id="trojan-server" placeholder="example.com">
+                            </div>
+                            <div class="form-group">
+                                <label>端口 *</label>
+                                <input type="number" id="trojan-port" placeholder="443">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>密码 *</label>
+                            <input type="password" id="trojan-password" placeholder="your-password">
+                        </div>
+                        <div class="form-group">
+                            <label>SNI</label>
+                            <input type="text" id="trojan-sni" placeholder="example.com">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- JSON 模式 -->
+                <div id="json-mode" class="form-section">
+                    <div class="form-group">
+                        <label>节点名称 *</label>
+                        <input type="text" id="node-name-json" placeholder="例如: 香港节点">
+                    </div>
+                    <div class="form-group">
+                        <label>节点类型 *</label>
+                        <select id="node-type-json">
+                            <option value="socks">SOCKS5</option>
+                            <option value="vless">VLESS</option>
+                            <option value="vmess">VMess</option>
+                            <option value="trojan">Trojan</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>配置 (JSON) *</label>
+                        <textarea id="node-config-json" placeholder='{"server":"1.2.3.4","server_port":1080}' style="min-height: 200px; font-family: monospace;"></textarea>
+                        <small>请输入完整的 sing-box outbound 配置</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeModal('createNodeModal')">取消</button>
+                <button type="submit" class="btn btn-primary" id="node-submit-btn">创建</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 节点日志查看器模态框 -->
+<div id="logViewerModal" class="modal">
+    <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-header">
+            <h3 id="log-modal-title">节点日志</h3>
+            <button class="modal-close" onclick="closeModal('logViewerModal')">&times;</button>
+        </div>
+
+        <div class="log-controls">
+            <select id="log-lines">
+                <option value="50">最近50行</option>
+                <option value="100" selected>最近100行</option>
+                <option value="200">最近200行</option>
+                <option value="500">最近500行</option>
+                <option value="1000">最近1000行</option>
+            </select>
+
+            <input type="text" id="log-search" placeholder="搜索关键词..." />
+
+            <div class="btn-group">
+                <button class="btn btn-sm" onclick="refreshLogs()" title="刷新日志">⟳ 刷新</button>
+                <button class="btn btn-sm btn-warning" onclick="clearNodeLogs()" title="清空日志">🗑 清空</button>
+                <button class="btn btn-sm btn-success" onclick="downloadLogs()" title="下载日志">↓ 下载</button>
+            </div>
+        </div>
+
+        <div class="log-info">
+            <span id="log-count">加载中...</span>
+            <span id="log-updated">-</span>
+        </div>
+
+        <div class="log-viewer" id="log-content">
+            <div style="text-align: center; color: #888;">加载中...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ===== 节点管理模块 =====
+
+// 当前查看日志的节点
+let currentLogNodeId = null;
+let currentLogNodeName = null;
+
+// 当前配置模式（form 或 json）
+let currentConfigMode = 'form';
+
+// 切换配置模式
+function switchConfigMode(mode) {
+    currentConfigMode = mode;
+    const formMode = document.getElementById('form-mode');
+    const jsonMode = document.getElementById('json-mode');
+    const btns = document.querySelectorAll('.switch-btn');
+
+    btns.forEach((btn, idx) => {
+        if ((mode === 'form' && idx === 0) || (mode === 'json' && idx === 1)) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    if (mode === 'form') {
+        formMode.classList.add('active');
+        jsonMode.classList.remove('active');
+    } else {
+        formMode.classList.remove('active');
+        jsonMode.classList.add('active');
+    }
+}
+
+// 更新节点类型字段显示
+function updateNodeTypeFields() {
+    const type = document.getElementById('node-type-form').value;
+    document.querySelectorAll('.node-type-fields').forEach(f => f.style.display = 'none');
+    const fields = document.getElementById(type + '-fields');
+    if (fields) {
+        fields.style.display = 'block';
+    }
+}
+
+// 从表单构建配置JSON
+function buildConfigFromForm() {
+    const type = document.getElementById('node-type-form').value;
+    let config = { type };
+
+    if (type === 'socks') {
+        config.server = document.getElementById('socks-server').value;
+        config.server_port = parseInt(document.getElementById('socks-port').value) || 1080;
+
+        const username = document.getElementById('socks-username').value;
+        const password = document.getElementById('socks-password').value;
+        if (username) config.username = username;
+        if (password) config.password = password;
+
+        const udp = document.getElementById('socks-udp').checked;
+        if (udp) config.udp_over_tcp = true;
+
+        config.version = "5";
+    } else if (type === 'vless') {
+        config.server = document.getElementById('vless-server').value;
+        config.server_port = parseInt(document.getElementById('vless-port').value) || 443;
+        config.uuid = document.getElementById('vless-uuid').value;
+
+        const flow = document.getElementById('vless-flow').value;
+        if (flow) config.flow = flow;
+
+        const tlsEnabled = document.getElementById('vless-tls').checked;
+        if (tlsEnabled) {
+            config.tls = { enabled: true };
+
+            const sni = document.getElementById('vless-sni').value;
+            if (sni) config.tls.server_name = sni;
+
+            const realityEnabled = document.getElementById('vless-reality').checked;
+            if (realityEnabled) {
+                const pubkey = document.getElementById('vless-pubkey').value;
+                const shortid = document.getElementById('vless-shortid').value;
+
+                config.tls.reality = {
+                    enabled: true,
+                    public_key: pubkey,
+                    short_id: shortid
+                };
+
+                config.tls.utls = {
+                    enabled: true,
+                    fingerprint: "chrome"
+                };
+            }
+        }
+    } else if (type === 'vmess') {
+        config.server = document.getElementById('vmess-server').value;
+        config.server_port = parseInt(document.getElementById('vmess-port').value) || 443;
+        config.uuid = document.getElementById('vmess-uuid').value;
+
+        const security = document.getElementById('vmess-security').value;
+        if (security) config.security = security;
+
+        const alterid = parseInt(document.getElementById('vmess-alterid').value);
+        if (alterid) config.alter_id = alterid;
+
+        const tlsEnabled = document.getElementById('vmess-tls').checked;
+        if (tlsEnabled) {
+            config.tls = { enabled: true };
+            const sni = document.getElementById('vmess-sni').value;
+            if (sni) config.tls.server_name = sni;
+        }
+    } else if (type === 'trojan') {
+        config.server = document.getElementById('trojan-server').value;
+        config.server_port = parseInt(document.getElementById('trojan-port').value) || 443;
+        config.password = document.getElementById('trojan-password').value;
+
+        config.tls = { enabled: true };
+        const sni = document.getElementById('trojan-sni').value;
+        if (sni) config.tls.server_name = sni;
+    }
+
+    return config;
+}
+
+// 从配置JSON加载到表单
+function loadConfigToForm(config) {
+    const type = config.type;
+    document.getElementById('node-type-form').value = type;
+    updateNodeTypeFields();
+
+    if (type === 'socks') {
+        document.getElementById('socks-server').value = config.server || '';
+        document.getElementById('socks-port').value = config.server_port || 1080;
+        document.getElementById('socks-username').value = config.username || '';
+        document.getElementById('socks-password').value = config.password || '';
+        document.getElementById('socks-udp').checked = config.udp_over_tcp || false;
+    } else if (type === 'vless') {
+        document.getElementById('vless-server').value = config.server || '';
+        document.getElementById('vless-port').value = config.server_port || 443;
+        document.getElementById('vless-uuid').value = config.uuid || '';
+        document.getElementById('vless-flow').value = config.flow || '';
+
+        if (config.tls && config.tls.enabled) {
+            document.getElementById('vless-tls').checked = true;
+            document.getElementById('vless-sni').value = config.tls.server_name || '';
+
+            if (config.tls.reality && config.tls.reality.enabled) {
+                document.getElementById('vless-reality').checked = true;
+                document.getElementById('vless-pubkey').value = config.tls.reality.public_key || '';
+                document.getElementById('vless-shortid').value = config.tls.reality.short_id || '';
+                document.getElementById('vless-reality-fields').style.display = 'block';
+            }
+        }
+    } else if (type === 'vmess') {
+        document.getElementById('vmess-server').value = config.server || '';
+        document.getElementById('vmess-port').value = config.server_port || 443;
+        document.getElementById('vmess-uuid').value = config.uuid || '';
+        document.getElementById('vmess-security').value = config.security || 'auto';
+        document.getElementById('vmess-alterid').value = config.alter_id || 0;
+
+        if (config.tls && config.tls.enabled) {
+            document.getElementById('vmess-tls').checked = true;
+            document.getElementById('vmess-sni').value = config.tls.server_name || '';
+            document.getElementById('vmess-tls-fields').style.display = 'block';
+        }
+    } else if (type === 'trojan') {
+        document.getElementById('trojan-server').value = config.server || '';
+        document.getElementById('trojan-port').value = config.server_port || 443;
+        document.getElementById('trojan-password').value = config.password || '';
+        document.getElementById('trojan-sni').value = (config.tls && config.tls.server_name) || '';
+    }
+}
+
+// 加载节点列表
+async function loadNodes() {
+    const tbody = document.getElementById('nodes-tbody');
+    const loading = document.getElementById('nodes-loading');
+    const table = document.getElementById('nodes-table');
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes`);
+        const data = await res.json();
+
+        loading.style.display = 'none';
+        table.style.display = 'table';
+
+        if (!data.data || data.data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #9ca3af;">暂无节点</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = data.data.map(node => {
+            let config = {};
+            try {
+                config = JSON.parse(node.config);
+            } catch (e) {}
+            const server = config.server || '-';
+
+            // 计算延迟显示
+            let latencyHtml = '';
+            if (node.status !== 'running') {
+                latencyHtml = '<span class="latency latency-unavailable">-</span>';
+            } else if (!node.available) {
+                latencyHtml = '<span class="latency latency-unavailable">离线</span>';
+            } else {
+                const latency = node.latency || 0;
+                let latencyClass = 'latency-excellent';
+                if (latency > 300) {
+                    latencyClass = 'latency-poor';
+                } else if (latency > 100) {
+                    latencyClass = 'latency-good';
+                }
+                latencyHtml = `<span class="latency ${latencyClass}">${latency}ms</span>`;
+            }
+
+            return `
+            <tr>
+                <td>${node.id}</td>
+                <td><strong>${node.name}</strong></td>
+                <td>${node.type.toUpperCase()}</td>
+                <td>${server}</td>
+                <td>${node.tun_name || '-'}</td>
+                <td><code>${node.table_id}</code></td>
+                <td>${latencyHtml}</td>
+                <td><span class="status status-${node.status}">${node.status}</span></td>
+                <td>
+                    <div class="actions">
+                        ${node.status === 'running'
+                            ? `<button class="btn btn-sm btn-warning" onclick="stopNode(${node.id})">停止</button>`
+                            : `<button class="btn btn-sm btn-success" onclick="startNode(${node.id})">启动</button>`
+                        }
+                        <button class="btn btn-sm" onclick="restartNode(${node.id})">重启</button>
+                        <button class="btn btn-sm" onclick="viewNodeLogs(${node.id}, '${node.name}')">查看日志</button>
+                        <button class="btn btn-sm" onclick="editNode(${node.id})">编辑</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteNode(${node.id}, '${node.name}')">删除</button>
+                    </div>
+                </td>
+            </tr>
+        `}).join('');
+    } catch (e) {
+        console.error('加载节点失败:', e);
+        loading.textContent = '加载失败';
+    }
+}
+
+// 显示创建节点模态框
+async function showCreateNodeModal() {
+    // 设置为创建模式
+    document.getElementById('node-modal-title').textContent = '创建节点';
+    document.getElementById('node-submit-btn').textContent = '创建';
+    document.getElementById('node-id').value = '';
+
+    // 重置表单
+    document.getElementById('createNodeModal').querySelector('form').reset();
+
+    // 重置模式为表单模式
+    switchConfigMode('form');
+    updateNodeTypeFields();
+
+    openModal('createNodeModal');
+}
+
+// 节点操作 - 保存（创建或更新）
+async function saveNode(e) {
+    e.preventDefault();
+
+    const nodeId = document.getElementById('node-id').value;
+    const isEdit = nodeId !== '';
+
+    let name, type, configText;
+
+    if (currentConfigMode === 'form') {
+        // 表单模式 - 从表单构建配置
+        name = document.getElementById('node-name-form').value;
+        type = document.getElementById('node-type-form').value;
+
+        if (!name || !name.trim()) {
+            showToast('请填写节点名称', 'error');
+            return;
+        }
+
+        const config = buildConfigFromForm();
+        configText = JSON.stringify(config);
+    } else {
+        // JSON模式 - 直接使用JSON
+        name = document.getElementById('node-name-json').value;
+        type = document.getElementById('node-type-json').value;
+        configText = document.getElementById('node-config-json').value;
+
+        if (!name || !name.trim()) {
+            showToast('请填写节点名称', 'error');
+            return;
+        }
+
+        // 验证JSON格式
+        try {
+            JSON.parse(configText);
+        } catch {
+            showToast('JSON 格式错误，请检查配置', 'error');
+            return;
+        }
+    }
+
+    const url = isEdit ? `${API_BASE}/nodes/${nodeId}` : `${API_BASE}/nodes`;
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const requestBody = {
+        name,
+        type,
+        config: configText,
+        enabled: true
+    };
+
+    const res = await authFetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+    });
+
+    const data = await res.json();
+    if (data.code === 0) {
+        showToast(
+            isEdit ? '节点已更新，请重启节点使配置生效' : `节点创建成功！ID: ${data.data.id}`,
+            'success'
+        );
+        closeModal('createNodeModal');
+        loadNodes();
+    } else {
+        showToast((isEdit ? '更新' : '创建') + '失败: ' + data.message, 'error');
+    }
+}
+
+// 启动节点
+async function startNode(id) {
+    const res = await authFetch(`${API_BASE}/nodes/${id}/start`, { method: 'POST' });
+    const data = await res.json();
+    if (data.code === 0) {
+        showToast('节点启动成功', 'success');
+        loadNodes();
+    } else {
+        showToast('启动失败: ' + data.message, 'error');
+    }
+}
+
+// 停止节点
+async function stopNode(id) {
+    const res = await authFetch(`${API_BASE}/nodes/${id}/stop`, { method: 'POST' });
+    const data = await res.json();
+    if (data.code === 0) {
+        showToast('节点已停止', 'success');
+        loadNodes();
+    } else {
+        showToast('停止失败: ' + data.message, 'error');
+    }
+}
+
+// 重启节点
+async function restartNode(id) {
+    const loadingToast = showToast('正在重启节点，请稍候...', 'info', '', 0);
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes/${id}/restart`, { method: 'POST' });
+        const data = await res.json();
+
+        // 清除"正在重启"提示
+        if (loadingToast) {
+            loadingToast.remove();
+        }
+
+        if (data.code === 0) {
+            showToast('节点重启成功', 'success');
+            loadNodes();
+        } else {
+            showToast('重启失败: ' + data.message, 'error');
+        }
+    } catch (error) {
+        // 清除"正在重启"提示
+        if (loadingToast) {
+            loadingToast.remove();
+        }
+        showToast('重启失败: ' + error.message, 'error');
+    }
+}
+
+// 删除节点
+async function deleteNode(id, name) {
+    if (!confirm(`确定要删除节点 "${name}" 吗？`)) return;
+
+    const res = await authFetch(`${API_BASE}/nodes/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.code === 0) {
+        showToast('节点已删除', 'success');
+        loadNodes();
+    } else {
+        showToast('删除失败: ' + data.message, 'error');
+    }
+}
+
+// 编辑节点
+async function editNode(id) {
+    try {
+        const res = await authFetch(`${API_BASE}/nodes/${id}`);
+        const data = await res.json();
+
+        if (data.code === 0 && data.data) {
+            const node = data.data;
+            const config = JSON.parse(node.config);
+
+            // 设置为编辑模式
+            document.getElementById('node-modal-title').textContent = '编辑节点';
+            document.getElementById('node-submit-btn').textContent = '保存';
+            document.getElementById('node-id').value = node.id;
+
+            // 填充表单模式数据
+            document.getElementById('node-name-form').value = node.name;
+            loadConfigToForm(config);
+
+            // 填充JSON模式数据
+            document.getElementById('node-name-json').value = node.name;
+            document.getElementById('node-type-json').value = node.type;
+            document.getElementById('node-config-json').value = JSON.stringify(config, null, 2);
+
+            // 默认显示表单模式
+            switchConfigMode('form');
+
+            // 显示模态框
+            openModal('createNodeModal');
+        } else {
+            showToast('获取节点信息失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        console.error('编辑节点失败:', e);
+        showToast('获取节点信息失败', 'error');
+    }
+}
+
+// ===== 日志查看功能 =====
+
+// 查看节点日志
+async function viewNodeLogs(nodeId, nodeName) {
+    currentLogNodeId = nodeId;
+    currentLogNodeName = nodeName;
+
+    document.getElementById('log-modal-title').textContent = `节点日志 - ${nodeName}`;
+    document.getElementById('log-search').value = '';
+
+    // 添加事件监听器
+    const logLinesSelect = document.getElementById('log-lines');
+    const logSearchInput = document.getElementById('log-search');
+
+    logLinesSelect.onchange = () => loadLogs();
+    logSearchInput.oninput = (e) => {
+        const keyword = e.target.value.trim();
+        if (keyword) {
+            searchLogs(keyword);
+        } else {
+            loadLogs();
+        }
+    };
+
+    // 显示模态框
+    openModal('logViewerModal');
+
+    // 加载日志
+    await loadLogs();
+}
+
+// 加载日志
+async function loadLogs() {
+    if (!currentLogNodeId) return;
+
+    const lines = document.getElementById('log-lines').value;
+    const logContent = document.getElementById('log-content');
+    const logCount = document.getElementById('log-count');
+    const logUpdated = document.getElementById('log-updated');
+
+    logContent.innerHTML = '<div style="text-align: center; color: #888;">加载中...</div>';
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs?lines=${lines}`);
+        const data = await res.json();
+
+        if (data.code === 0) {
+            const logs = data.data.logs || [];
+
+            if (logs.length === 0) {
+                logContent.innerHTML = '<div style="text-align: center; color: #888;">暂无日志</div>';
+                logCount.textContent = '共 0 行';
+            } else {
+                // 移除 ANSI 颜色代码并显示日志
+                logContent.innerHTML = logs.map(log => {
+                    // 移除 ANSI 转义序列
+                    const cleanLog = log.replace(/\x1b\[[0-9;]*m/g, '');
+                    return `<div class="log-line">${escapeHtml(cleanLog)}</div>`;
+                }).join('');
+
+                // 滚动到底部
+                logContent.scrollTop = logContent.scrollHeight;
+
+                // 更新信息
+                logCount.textContent = `共 ${logs.length} 行`;
+                logUpdated.textContent = `最后更新: ${new Date().toLocaleTimeString()}`;
+            }
+        } else {
+            logContent.innerHTML = `<div style="text-align: center; color: #888;">加载失败: ${data.message}</div>`;
+        }
+    } catch (error) {
+        logContent.innerHTML = `<div style="text-align: center; color: #888;">加载失败: ${error.message}</div>`;
+    }
+}
+
+// 搜索日志
+async function searchLogs(keyword) {
+    if (!currentLogNodeId || !keyword) return;
+
+    const lines = document.getElementById('log-lines').value;
+    const logContent = document.getElementById('log-content');
+    const logCount = document.getElementById('log-count');
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs?lines=${lines}&search=${encodeURIComponent(keyword)}`);
+        const data = await res.json();
+
+        if (data.code === 0) {
+            const logs = data.data.logs || [];
+
+            if (logs.length === 0) {
+                logContent.innerHTML = `<div style="text-align: center; color: #888;">未找到包含 "${keyword}" 的日志</div>`;
+                logCount.textContent = '共 0 行';
+            } else {
+                logContent.innerHTML = logs.map(log => {
+                    const cleanLog = log.replace(/\x1b\[[0-9;]*m/g, '');
+                    // 高亮关键词
+                    const highlighted = cleanLog.replace(
+                        new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+                        match => `<mark style="background: yellow; color: black;">${match}</mark>`
+                    );
+                    return `<div class="log-line">${highlighted}</div>`;
+                }).join('');
+
+                logCount.textContent = `共 ${logs.length} 行`;
+            }
+        }
+    } catch (error) {
+        logContent.innerHTML = `<div style="text-align: center; color: #888;">搜索失败: ${error.message}</div>`;
+    }
+}
+
+// 刷新日志
+function refreshLogs() {
+    const searchKeyword = document.getElementById('log-search').value.trim();
+    if (searchKeyword) {
+        searchLogs(searchKeyword);
+    } else {
+        loadLogs();
+    }
+}
+
+// 清空日志
+async function clearNodeLogs() {
+    if (!currentLogNodeId) return;
+
+    if (!confirm(`确定要清空节点 "${currentLogNodeName}" 的所有日志吗？\n此操作不可恢复！`)) {
+        return;
+    }
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs/clear`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+
+        if (data.code === 0) {
+            showToast('日志已清空', 'success');
+            loadLogs();
+        } else {
+            showToast('清空失败: ' + data.message, 'error');
+        }
+    } catch (error) {
+        showToast('清空失败: ' + error.message, 'error');
+    }
+}
+
+// 下载日志
+async function downloadLogs() {
+    if (!currentLogNodeId) return;
+
+    try {
+        const lines = document.getElementById('log-lines').value;
+        const res = await authFetch(`${API_BASE}/nodes/${currentLogNodeId}/logs?lines=${lines}`);
+        const data = await res.json();
+
+        if (data.code === 0 && data.data.logs) {
+            const logs = data.data.logs;
+            const cleanLogs = logs.map(log => log.replace(/\x1b\[[0-9;]*m/g, '')).join('\n');
+
+            // 创建下载
+            const blob = new Blob([cleanLogs], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `node_${currentLogNodeId}_${currentLogNodeName}_${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showToast('日志已下载', 'success');
+        } else {
+            showToast('下载失败: ' + data.message, 'error');
+        }
+    } catch (error) {
+        showToast('下载失败: ' + error.message, 'error');
+    }
+}
+
+// HTML转义函数
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadNodes();
+
+    // VLESS Reality切换
+    const vlessReality = document.getElementById('vless-reality');
+    if (vlessReality) {
+        vlessReality.addEventListener('change', function() {
+            document.getElementById('vless-reality-fields').style.display =
+                this.checked ? 'block' : 'none';
+        });
+    }
+
+    // VMess TLS切换
+    const vmessTls = document.getElementById('vmess-tls');
+    if (vmessTls) {
+        vmessTls.addEventListener('change', function() {
+            document.getElementById('vmess-tls-fields').style.display =
+                this.checked ? 'block' : 'none';
+        });
+    }
+});
+</script>
+{{end}}
+
+{{define "nodes-page"}}
+{{template "base" .}}
+{{end}}

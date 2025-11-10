@@ -115,10 +115,25 @@ func migrate() error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 
+		// 创建端口映射表
+		`CREATE TABLE IF NOT EXISTS port_mappings (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			protocol TEXT NOT NULL,
+			dst_port INTEGER NOT NULL UNIQUE,
+			to_address TEXT NOT NULL,
+			to_port INTEGER NOT NULL,
+			enabled BOOLEAN DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+
 		// 创建索引
 		`CREATE INDEX IF NOT EXISTS idx_routing_rules_node_id ON routing_rules(node_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_routing_rules_enabled ON routing_rules(enabled)`,
 		`CREATE INDEX IF NOT EXISTS idx_node_stats_node_id ON node_stats(node_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_port_mappings_dst_port ON port_mappings(dst_port)`,
+		`CREATE INDEX IF NOT EXISTS idx_port_mappings_enabled ON port_mappings(enabled)`,
 	}
 
 	for _, migration := range migrations {

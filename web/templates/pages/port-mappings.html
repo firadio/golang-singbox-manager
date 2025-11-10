@@ -1,0 +1,285 @@
+{{define "port-mappings-content"}}
+<!-- 端口映射列表 -->
+<div class="card">
+    <div id="port-mappings-loading" class="loading">
+        <div class="loading-spinner"></div>
+        <div>加载中...</div>
+    </div>
+
+    <table id="port-mappings-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>协议</th>
+                <th>外部端口</th>
+                <th>目标地址</th>
+                <th>目标端口</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="port-mappings-tbody">
+        </tbody>
+    </table>
+</div>
+
+<!-- 创建/编辑端口映射模态框 -->
+<div id="createPortMappingModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="port-mapping-modal-title">创建端口映射</h3>
+            <button class="modal-close" onclick="closeModal('createPortMappingModal')">&times;</button>
+        </div>
+        <form onsubmit="savePortMapping(event)">
+            <div class="modal-body">
+                <input type="hidden" id="port-mapping-id">
+
+                <div class="form-group">
+                    <label for="port-mapping-name">映射名称</label>
+                    <input type="text" id="port-mapping-name" required placeholder="例如: RDP-Server">
+                </div>
+
+                <div class="form-group">
+                    <label for="port-mapping-protocol">协议</label>
+                    <select id="port-mapping-protocol" required>
+                        <option value="tcp">TCP</option>
+                        <option value="udp">UDP</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="port-mapping-dst-port">外部端口</label>
+                    <input type="number" id="port-mapping-dst-port" required min="1" max="65535" placeholder="例如: 20200">
+                    <small>外部访问的端口号 (1-65535)</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="port-mapping-to-address">目标地址</label>
+                    <input type="text" id="port-mapping-to-address" required placeholder="例如: 192.168.100.200">
+                    <small>内网目标 IP 地址</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="port-mapping-to-port">目标端口</label>
+                    <input type="number" id="port-mapping-to-port" required min="1" max="65535" placeholder="例如: 3389">
+                    <small>内网目标端口号 (1-65535)</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeModal('createPortMappingModal')">取消</button>
+                <button type="submit" class="btn btn-primary" id="port-mapping-submit-btn">创建</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// 端口映射管理功能
+(function() {
+    // 加载端口映射列表
+    window.loadPortMappings = async function() {
+        const tbody = document.getElementById('port-mappings-tbody');
+        const loading = document.getElementById('port-mappings-loading');
+        const table = document.getElementById('port-mappings-table');
+
+        try {
+            const res = await authFetch(`${API_BASE}/port-mappings`);
+            const data = await res.json();
+
+            loading.style.display = 'none';
+            table.style.display = 'table';
+
+            if (!data.data || data.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #9ca3af;">暂无端口映射</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.data.map(mapping => `
+                <tr>
+                    <td>${mapping.id}</td>
+                    <td>${mapping.name}</td>
+                    <td>${mapping.protocol.toUpperCase()}</td>
+                    <td><code>${mapping.dst_port}</code></td>
+                    <td><code>${mapping.to_address}</code></td>
+                    <td><code>${mapping.to_port}</code></td>
+                    <td><span class="status status-${mapping.enabled ? 'running' : 'stopped'}">${mapping.enabled ? '启用' : '禁用'}</span></td>
+                    <td>
+                        <div class="actions">
+                            ${mapping.enabled
+                                ? `<button class="btn btn-sm btn-warning" onclick="disablePortMapping(${mapping.id})">禁用</button>`
+                                : `<button class="btn btn-sm btn-success" onclick="enablePortMapping(${mapping.id})">启用</button>`
+                            }
+                            <button class="btn btn-sm" onclick="editPortMapping(${mapping.id})">编辑</button>
+                            <button class="btn btn-sm btn-danger" onclick="deletePortMapping(${mapping.id}, '${mapping.name}')">删除</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            console.error('加载端口映射失败:', e);
+            loading.textContent = '加载失败';
+        }
+    };
+
+    // 显示创建映射对话框
+    window.showCreatePortMappingModal = function() {
+        document.getElementById('port-mapping-modal-title').textContent = '创建端口映射';
+        document.getElementById('port-mapping-submit-btn').textContent = '创建';
+        document.getElementById('createPortMappingModal').querySelector('form').reset();
+        document.getElementById('port-mapping-id').value = '';
+        document.getElementById('createPortMappingModal').classList.add('active');
+    };
+
+    // 编辑端口映射
+    window.editPortMapping = async function(id) {
+        try {
+            const res = await authFetch(`${API_BASE}/port-mappings/${id}`);
+            const data = await res.json();
+
+            if (data.code === 0) {
+                const mapping = data.data;
+                document.getElementById('port-mapping-modal-title').textContent = '编辑端口映射';
+                document.getElementById('port-mapping-submit-btn').textContent = '保存';
+                document.getElementById('port-mapping-id').value = mapping.id;
+                document.getElementById('port-mapping-name').value = mapping.name;
+                document.getElementById('port-mapping-protocol').value = mapping.protocol;
+                document.getElementById('port-mapping-dst-port').value = mapping.dst_port;
+                document.getElementById('port-mapping-to-address').value = mapping.to_address;
+                document.getElementById('port-mapping-to-port').value = mapping.to_port;
+                document.getElementById('createPortMappingModal').classList.add('active');
+            } else {
+                showToast('获取端口映射失败', 'error');
+            }
+        } catch (error) {
+            showToast('获取端口映射失败: ' + error.message, 'error');
+        }
+    };
+
+    // 保存端口映射
+    window.savePortMapping = async function(event) {
+        event.preventDefault();
+
+        const id = document.getElementById('port-mapping-id').value;
+        const isEdit = id !== '';
+
+        const mapping = {
+            name: document.getElementById('port-mapping-name').value,
+            protocol: document.getElementById('port-mapping-protocol').value,
+            dst_port: parseInt(document.getElementById('port-mapping-dst-port').value),
+            to_address: document.getElementById('port-mapping-to-address').value,
+            to_port: parseInt(document.getElementById('port-mapping-to-port').value),
+            enabled: true
+        };
+
+        try {
+            const url = isEdit ? `${API_BASE}/port-mappings/${id}` : `${API_BASE}/port-mappings`;
+            const method = isEdit ? 'PUT' : 'POST';
+
+            const res = await authFetch(url, {
+                method: method,
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(mapping)
+            });
+            const data = await res.json();
+
+            if (data.code === 0) {
+                showToast(
+                    isEdit ? '端口映射已更新，已自动同步到 MikroTik' : `端口映射创建成功！已自动同步到 MikroTik`,
+                    'success'
+                );
+                closeModal('createPortMappingModal');
+                loadPortMappings();
+            } else {
+                showToast(isEdit ? '更新失败: ' + data.message : '创建失败: ' + data.message, 'error');
+            }
+        } catch (error) {
+            showToast('操作失败: ' + error.message, 'error');
+        }
+    };
+
+    // 删除端口映射
+    window.deletePortMapping = async function(id, name) {
+        if (!confirm(`确定要删除端口映射 "${name}" 吗？\n相关的 MikroTik 规则也会被删除。`)) {
+            return;
+        }
+
+        try {
+            const res = await authFetch(`${API_BASE}/port-mappings/${id}`, {method: 'DELETE'});
+            const data = await res.json();
+
+            if (data.code === 0) {
+                showToast('端口映射已删除', 'success');
+                loadPortMappings();
+            } else {
+                showToast('删除失败: ' + data.message, 'error');
+            }
+        } catch (error) {
+            showToast('删除失败: ' + error.message, 'error');
+        }
+    };
+
+    // 启用端口映射
+    window.enablePortMapping = async function(id) {
+        try {
+            const res = await authFetch(`${API_BASE}/port-mappings/${id}/enable`, {method: 'POST'});
+            const data = await res.json();
+
+            if (data.code === 0) {
+                showToast('端口映射已启用', 'success');
+                loadPortMappings();
+            } else {
+                showToast('启用失败: ' + data.message, 'error');
+            }
+        } catch (error) {
+            showToast('启用失败: ' + error.message, 'error');
+        }
+    };
+
+    // 禁用端口映射
+    window.disablePortMapping = async function(id) {
+        try {
+            const res = await authFetch(`${API_BASE}/port-mappings/${id}/disable`, {method: 'POST'});
+            const data = await res.json();
+
+            if (data.code === 0) {
+                showToast('端口映射已禁用', 'success');
+                loadPortMappings();
+            } else {
+                showToast('禁用失败: ' + data.message, 'error');
+            }
+        } catch (error) {
+            showToast('禁用失败: ' + error.message, 'error');
+        }
+    };
+
+    // 同步到 MikroTik
+    window.syncPortMappings = async function() {
+        if (!confirm('确定要同步所有端口映射到 MikroTik 吗？\n这将更新所有相关的 NAT 规则。')) {
+            return;
+        }
+
+        try {
+            const res = await authFetch(`${API_BASE}/port-mappings/sync`, {method: 'POST'});
+            const data = await res.json();
+
+            if (data.code === 0) {
+                showToast('端口映射同步成功', 'success');
+            } else {
+                showToast('同步失败: ' + data.message, 'error');
+            }
+        } catch (error) {
+            showToast('同步失败: ' + error.message, 'error');
+        }
+    };
+})();
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadPortMappings();
+});
+</script>
+{{end}}
+
+{{define "port-mappings-page"}}
+{{template "base" .}}
+{{end}}

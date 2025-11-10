@@ -1,0 +1,305 @@
+{{define "settings-content"}}
+<!-- 系统设置 -->
+<div class="card">
+    <h3>Web服务设置</h3>
+    <div class="form-group">
+        <label>监听端口</label>
+        <input type="number" id="settings-web-port" placeholder="80">
+        <small>修改端口后需要重启服务</small>
+    </div>
+</div>
+
+<div class="card">
+    <h3>认证设置</h3>
+    <div class="form-group">
+        <div class="checkbox-group" style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="settings-auth-enabled">
+            <label style="margin: 0;">启用登录认证</label>
+        </div>
+    </div>
+    <div class="form-group">
+        <label>登录密码</label>
+        <input type="password" id="settings-auth-password" placeholder="留空表示不修改">
+        <small>设置后需要密码才能访问管理界面</small>
+    </div>
+</div>
+
+<div class="card">
+    <h3>健康检查</h3>
+    <div class="form-group">
+        <div class="checkbox-group" style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="settings-health-enabled">
+            <label style="margin: 0;">启用健康检查</label>
+        </div>
+    </div>
+    <div class="form-group">
+        <label>检查间隔（秒）</label>
+        <input type="number" id="settings-health-interval" placeholder="30">
+    </div>
+</div>
+
+<div class="card">
+    <h3>MikroTik 集成</h3>
+    <div class="form-group">
+        <div class="checkbox-group" style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="settings-mikrotik-enabled">
+            <label style="margin: 0;">启用 MikroTik 集成</label>
+        </div>
+        <small>启用后，添加/删除路由规则时会自动在 MikroTik 路由器上操作</small>
+    </div>
+
+    <div class="form-group">
+        <label>MikroTik 地址</label>
+        <input type="text" id="settings-mikrotik-address" placeholder="192.168.88.1">
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div class="form-group">
+            <label>端口</label>
+            <input type="number" id="settings-mikrotik-port" placeholder="8728">
+        </div>
+        <div class="form-group">
+            <label>用户名</label>
+            <input type="text" id="settings-mikrotik-username" placeholder="admin">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>密码</label>
+        <input type="password" id="settings-mikrotik-password" placeholder="留空表示不修改">
+    </div>
+
+    <div class="form-group">
+        <label>路由表名称</label>
+        <input type="text" id="settings-mikrotik-routing-table" placeholder="rtab-250">
+        <small>MikroTik 路由表名称，规则将添加到此表中</small>
+    </div>
+
+    <div class="form-group">
+        <button class="btn btn-warning" onclick="testMikrotikConnection()">测试连接</button>
+    </div>
+</div>
+
+<div class="card">
+    <div style="display: flex; gap: 10px;">
+        <button class="btn btn-success" onclick="saveSettings()">保存设置</button>
+        <button class="btn" onclick="loadSettings()">重新加载</button>
+        <button class="btn btn-warning" onclick="restartService()">重启服务</button>
+    </div>
+</div>
+
+<!-- 重启倒计时 Overlay -->
+<div id="restartOverlay" class="restart-overlay">
+    <div class="restart-content">
+        <div class="restart-icon">🔄</div>
+        <div class="restart-title">服务正在重启</div>
+        <div class="restart-message" id="restartMessage">正在切换到新端口...</div>
+        <div class="restart-progress">
+            <div class="restart-progress-bar" id="restartProgressBar" style="width: 0%"></div>
+        </div>
+        <div class="restart-countdown" id="restartCountdown">5</div>
+        <div class="restart-info">页面即将自动跳转，请稍候...</div>
+    </div>
+</div>
+
+<script>
+// 加载设置
+async function loadSettings() {
+    try {
+        const res = await authFetch(`${API_BASE}/settings`);
+        const data = await res.json();
+
+        if (data.code === 0 && data.data) {
+            const settings = data.data;
+            document.getElementById('settings-web-port').value = settings.web_port || 80;
+            document.getElementById('settings-auth-enabled').checked = settings.auth_enabled || false;
+            document.getElementById('settings-health-enabled').checked = settings.health_check_enabled || false;
+            document.getElementById('settings-health-interval').value = settings.health_check_interval || 30;
+            document.getElementById('settings-mikrotik-enabled').checked = settings.mikrotik_enabled || false;
+            document.getElementById('settings-mikrotik-address').value = settings.mikrotik_address || '';
+            document.getElementById('settings-mikrotik-port').value = settings.mikrotik_port || 8728;
+            document.getElementById('settings-mikrotik-username').value = settings.mikrotik_username || 'admin';
+            document.getElementById('settings-mikrotik-routing-table').value = settings.mikrotik_routing_table || 'main';
+        }
+    } catch (error) {
+        console.error('Failed to load settings:', error);
+        showToast('加载设置失败', 'error');
+    }
+}
+
+// 保存设置
+async function saveSettings() {
+    const webPort = parseInt(document.getElementById('settings-web-port').value);
+    const currentPort = parseInt(window.location.port) || 80;
+    const authEnabled = document.getElementById('settings-auth-enabled').checked;
+    const authPassword = document.getElementById('settings-auth-password').value;
+    const healthEnabled = document.getElementById('settings-health-enabled').checked;
+    const healthInterval = parseInt(document.getElementById('settings-health-interval').value);
+    const mikrotikEnabled = document.getElementById('settings-mikrotik-enabled').checked;
+    const mikrotikAddress = document.getElementById('settings-mikrotik-address').value;
+    const mikrotikPort = parseInt(document.getElementById('settings-mikrotik-port').value);
+    const mikrotikUsername = document.getElementById('settings-mikrotik-username').value;
+    const mikrotikPassword = document.getElementById('settings-mikrotik-password').value;
+    const mikrotikRoutingTable = document.getElementById('settings-mikrotik-routing-table').value;
+
+    const requestBody = {
+        web_port: webPort,
+        auth_enabled: authEnabled,
+        health_check_enabled: healthEnabled,
+        health_check_interval: healthInterval,
+        mikrotik_enabled: mikrotikEnabled,
+        mikrotik_address: mikrotikAddress,
+        mikrotik_port: mikrotikPort,
+        mikrotik_username: mikrotikUsername,
+        mikrotik_routing_table: mikrotikRoutingTable
+    };
+
+    if (authPassword) {
+        requestBody.auth_password = authPassword;
+    }
+
+    if (mikrotikPassword) {
+        requestBody.mikrotik_password = mikrotikPassword;
+    }
+
+    try {
+        const res = await authFetch(`${API_BASE}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+
+        const data = await res.json();
+        if (data.code === 0) {
+            // 清空密码字段
+            document.getElementById('settings-auth-password').value = '';
+            document.getElementById('settings-mikrotik-password').value = '';
+
+            // 检查端口是否改变
+            if (data.data.port_changed) {
+                const newPort = data.data.new_port;
+
+                // 调用重启API
+                try {
+                    await authFetch(`${API_BASE}/system/restart`, { method: 'POST' });
+                } catch (e) {
+                    console.log('Restart request sent');
+                }
+
+                // 显示过渡页面并倒计时跳转
+                showRestartOverlay(`正在重启服务并切换到新端口 ${newPort}`, newPort, 6);
+            } else if (data.data.restart_required) {
+                if (confirm('设置保存成功！部分设置需要重启服务才能生效。\n是否现在重启服务？')) {
+                    try {
+                        await authFetch(`${API_BASE}/system/restart`, { method: 'POST' });
+                    } catch (e) {
+                        console.log('Restart request sent');
+                    }
+                    // 显示过渡页面
+                    showRestartOverlay('正在重启服务，请稍候...', currentPort, 4);
+                }
+            } else {
+                showToast('设置保存成功', 'success');
+            }
+        } else {
+            showToast('保存失败: ' + data.message, 'error');
+        }
+    } catch (error) {
+        showToast('保存失败: ' + error.message, 'error');
+    }
+}
+
+// 测试MikroTik连接
+async function testMikrotikConnection() {
+    const address = document.getElementById('settings-mikrotik-address').value;
+    const port = parseInt(document.getElementById('settings-mikrotik-port').value);
+    const username = document.getElementById('settings-mikrotik-username').value;
+    const password = document.getElementById('settings-mikrotik-password').value;
+
+    if (!address || !username) {
+        showToast('请填写 MikroTik 地址和用户名', 'warning');
+        return;
+    }
+
+    try {
+        const res = await authFetch(`${API_BASE}/settings/test-mikrotik`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                address: address,
+                port: port,
+                username: username,
+                password: password
+            })
+        });
+
+        const data = await res.json();
+        if (data.code === 0) {
+            showToast('MikroTik 连接测试成功！', 'success');
+        } else {
+            showToast('连接测试失败: ' + data.message, 'error');
+        }
+    } catch (error) {
+        showToast('连接测试失败: ' + error.message, 'error');
+    }
+}
+
+// 重启服务
+async function restartService() {
+    if (!confirm('确定要重启服务吗？\n重启过程中服务将暂时不可用。')) {
+        return;
+    }
+
+    const currentPort = parseInt(window.location.port) || 80;
+
+    try {
+        await authFetch(`${API_BASE}/system/restart`, { method: 'POST' });
+    } catch (e) {
+        console.log('Restart request sent');
+    }
+
+    // 显示过渡页面
+    showRestartOverlay('正在重启服务，请稍候...', currentPort, 4);
+}
+
+// 显示重启倒计时
+function showRestartOverlay(message, newPort, totalSeconds = 5) {
+    const overlay = document.getElementById('restartOverlay');
+    const messageEl = document.getElementById('restartMessage');
+    const countdownEl = document.getElementById('restartCountdown');
+    const progressBar = document.getElementById('restartProgressBar');
+
+    messageEl.textContent = message;
+    countdownEl.textContent = totalSeconds;
+    progressBar.style.width = '0%';
+    overlay.classList.add('active');
+
+    let secondsLeft = totalSeconds;
+    const interval = setInterval(() => {
+        secondsLeft--;
+        countdownEl.textContent = secondsLeft;
+        const progress = ((totalSeconds - secondsLeft) / totalSeconds) * 100;
+        progressBar.style.width = progress + '%';
+
+        if (secondsLeft <= 0) {
+            clearInterval(interval);
+            // 跳转到新端口
+            const protocol = window.location.protocol;
+            const hostname = window.location.hostname;
+            const newUrl = newPort === 80
+                ? `${protocol}//${hostname}/settings`
+                : `${protocol}//${hostname}:${newPort}/settings`;
+            window.location.href = newUrl;
+        }
+    }, 1000);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadSettings();
+});
+</script>
+{{end}}
+
+{{define "settings-page"}}
+{{template "base" .}}
+{{end}}

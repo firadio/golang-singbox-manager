@@ -1,15 +1,16 @@
+{{define "login"}}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - Sing-Box Manager</title>
+    <title>{{.Title}} - Sing-Box Manager</title>
     <link rel="stylesheet" href="/static/css/common.css">
 </head>
 <body>
     <div class="login-container">
         <div class="login-box">
-            <h1>Sing-Box Manager</h1>
+            <h1>🚀 Sing-Box Manager</h1>
             <form id="loginForm" onsubmit="handleLogin(event)">
                 <div class="form-group">
                     <label for="username">用户名</label>
@@ -47,7 +48,7 @@
                     setToken(data.data.token);
                     showToast('登录成功', 'success');
                     setTimeout(() => {
-                        window.location.href = '/static/nodes.html';
+                        window.location.href = '/nodes';
                     }, 500);
                 } else {
                     showToast(data.message || '登录失败', 'error');
@@ -59,8 +60,9 @@
 
         // 如果已登录，直接跳转
         if (isAuthenticated()) {
-            window.location.href = '/static/nodes.html';
+            window.location.href = '/nodes';
         }
     </script>
 </body>
 </html>
+{{end}}

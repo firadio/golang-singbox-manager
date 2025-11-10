@@ -1,0 +1,298 @@
+{{define "rules-content"}}
+<!-- 路由规则列表 -->
+<div class="card">
+    <div id="rules-loading" class="loading">
+        <div class="loading-spinner"></div>
+        <div>加载中...</div>
+    </div>
+
+    <table id="rules-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>源IP</th>
+                <th>目标节点</th>
+                <th>优先级</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="rules-tbody">
+        </tbody>
+    </table>
+</div>
+
+<!-- 创建/编辑规则模态框 -->
+<div id="createRuleModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="rule-modal-title">创建路由规则</h3>
+            <button class="modal-close" onclick="closeModal('createRuleModal')">&times;</button>
+        </div>
+        <form onsubmit="saveRule(event)">
+            <div class="modal-body">
+                <input type="hidden" id="rule-id">
+
+                <div class="form-group">
+                    <label>规则名称 *</label>
+                    <input type="text" id="rule-name" required placeholder="例如: route-192.168.100.101">
+                </div>
+
+                <div class="form-group">
+                    <label>源 IP *</label>
+                    <input type="text" id="rule-source-ip" required placeholder="192.168.100.101">
+                    <small>指定要路由的客户端 IP 地址</small>
+                </div>
+
+                <div class="form-group">
+                    <label>目标节点 *</label>
+                    <select id="rule-node-id" required>
+                        <option value="">选择节点...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>优先级</label>
+                    <input type="number" id="rule-priority" placeholder="留空自动分配，数字越小优先级越高">
+                    <small>创建时留空会自动分配（从100开始递增），编辑时可以调整优先级</small>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeModal('createRuleModal')">取消</button>
+                <button type="submit" class="btn btn-primary" id="rule-submit-btn">创建</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// 加载规则列表
+async function loadRules() {
+    const tbody = document.getElementById('rules-tbody');
+    const loading = document.getElementById('rules-loading');
+    const table = document.getElementById('rules-table');
+
+    if (!tbody || !loading || !table) return;
+
+    try {
+        const [rulesRes, nodesRes] = await Promise.all([
+            authFetch(`${API_BASE}/rules`),
+            authFetch(`${API_BASE}/nodes`)
+        ]);
+
+        const rules = await rulesRes.json();
+        const nodes = await nodesRes.json();
+
+        loading.style.display = 'none';
+        table.style.display = 'table';
+
+        if (!rules.data || rules.data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #9ca3af;">暂无规则</td></tr>';
+            return;
+        }
+
+        const nodeMap = {};
+        if (nodes.data) {
+            nodes.data.forEach(n => nodeMap[n.id] = n.name);
+        }
+
+        tbody.innerHTML = rules.data.map(rule => `
+            <tr>
+                <td>${rule.id}</td>
+                <td><strong>${rule.name}</strong></td>
+                <td>${rule.source_ip || '-'}</td>
+                <td>${nodeMap[rule.node_id] || rule.node_id}</td>
+                <td>${rule.priority || '-'}</td>
+                <td>${rule.enabled ? '<span class="status status-running">启用</span>' : '<span class="status status-stopped">禁用</span>'}</td>
+                <td>
+                    <div class="actions">
+                        ${rule.enabled
+                            ? `<button class="btn btn-sm btn-warning" onclick="disableRule(${rule.id})">禁用</button>`
+                            : `<button class="btn btn-sm btn-success" onclick="enableRule(${rule.id})">启用</button>`
+                        }
+                        <button class="btn btn-sm" onclick="editRule(${rule.id})">编辑</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteRule(${rule.id}, '${rule.name}')">删除</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.error('加载规则失败:', e);
+        loading.textContent = '加载失败';
+    }
+}
+
+// 显示创建规则模态框
+async function showCreateRuleModal() {
+    // 设置为创建模式
+    document.getElementById('rule-modal-title').textContent = '创建路由规则';
+    document.getElementById('rule-submit-btn').textContent = '创建';
+    document.getElementById('rule-id').value = '';
+
+    // 重置表单
+    document.getElementById('createRuleModal').querySelector('form').reset();
+
+    // 加载节点列表
+    try {
+        const res = await authFetch(`${API_BASE}/nodes`);
+        const data = await res.json();
+        const select = document.getElementById('rule-node-id');
+
+        if (data.data && data.data.length > 0) {
+            select.innerHTML = '<option value="">选择节点...</option>' +
+                data.data.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+            openModal('createRuleModal');
+        } else {
+            showToast('请先创建至少一个节点', 'warning');
+        }
+    } catch (e) {
+        showToast('加载节点列表失败', 'error');
+    }
+}
+
+// 保存规则
+async function saveRule(e) {
+    e.preventDefault();
+
+    const ruleId = document.getElementById('rule-id').value;
+    const isEdit = ruleId !== '';
+
+    const name = document.getElementById('rule-name').value;
+    const source_ip = document.getElementById('rule-source-ip').value;
+    const node_id = parseInt(document.getElementById('rule-node-id').value);
+    const priority = document.getElementById('rule-priority').value;
+
+    const url = isEdit ? `${API_BASE}/rules/${ruleId}` : `${API_BASE}/rules`;
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const requestBody = { name, source_ip, node_id, enabled: true };
+    if (priority) requestBody.priority = parseInt(priority);
+
+    try {
+        const res = await authFetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+
+        const data = await res.json();
+        if (data.code === 0) {
+            showToast(isEdit ? '规则更新成功' : '规则创建成功', 'success');
+            closeModal('createRuleModal');
+            loadRules();
+        } else {
+            showToast((isEdit ? '更新' : '创建') + '失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        showToast('保存失败: ' + e.message, 'error');
+    }
+}
+
+// 编辑规则
+async function editRule(id) {
+    try {
+        // 获取规则信息
+        const ruleRes = await authFetch(`${API_BASE}/rules/${id}`);
+        const ruleData = await ruleRes.json();
+
+        if (ruleData.code !== 0 || !ruleData.data) {
+            showToast('获取规则信息失败: ' + ruleData.message, 'error');
+            return;
+        }
+
+        const rule = ruleData.data;
+
+        // 加载节点列表
+        const nodesRes = await authFetch(`${API_BASE}/nodes`);
+        const nodesData = await nodesRes.json();
+
+        if (!nodesData.data || nodesData.data.length === 0) {
+            showToast('没有可用的节点', 'warning');
+            return;
+        }
+
+        // 设置为编辑模式
+        document.getElementById('rule-modal-title').textContent = '编辑路由规则';
+        document.getElementById('rule-submit-btn').textContent = '保存';
+        document.getElementById('rule-id').value = rule.id;
+
+        // 填充节点列表
+        const select = document.getElementById('rule-node-id');
+        select.innerHTML = '<option value="">选择节点...</option>' +
+            nodesData.data.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+
+        // 填充表单数据
+        document.getElementById('rule-name').value = rule.name;
+        document.getElementById('rule-source-ip').value = rule.source_ip || '';
+        document.getElementById('rule-node-id').value = rule.node_id;
+        document.getElementById('rule-priority').value = rule.priority || '';
+
+        // 显示模态框
+        openModal('createRuleModal');
+    } catch (e) {
+        console.error('编辑规则失败:', e);
+        showToast('获取规则信息失败', 'error');
+    }
+}
+
+// 启用规则
+async function enableRule(id) {
+    try {
+        const res = await authFetch(`${API_BASE}/rules/${id}/enable`, { method: 'POST' });
+        const data = await res.json();
+        if (data.code === 0) {
+            showToast('规则已启用', 'success');
+            loadRules();
+        } else {
+            showToast('启用失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        showToast('启用失败: ' + e.message, 'error');
+    }
+}
+
+// 禁用规则
+async function disableRule(id) {
+    try {
+        const res = await authFetch(`${API_BASE}/rules/${id}/disable`, { method: 'POST' });
+        const data = await res.json();
+        if (data.code === 0) {
+            showToast('规则已禁用', 'success');
+            loadRules();
+        } else {
+            showToast('禁用失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        showToast('禁用失败: ' + e.message, 'error');
+    }
+}
+
+// 删除规则
+async function deleteRule(id, name) {
+    if (!confirm(`确定要删除规则 "${name}" 吗？`)) return;
+
+    try {
+        const res = await authFetch(`${API_BASE}/rules/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.code === 0) {
+            showToast('规则已删除', 'success');
+            loadRules();
+        } else {
+            showToast('删除失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        showToast('删除失败: ' + e.message, 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadRules();
+});
+</script>
+{{end}}
+
+{{define "rules-page"}}
+{{template "base" .}}
+{{end}}

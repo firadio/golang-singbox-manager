@@ -14,15 +14,32 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// 从header获取密码
-		password := c.GetHeader("X-Auth-Password")
-		if password == "" {
-			// 尝试从query参数获取
-			password = c.Query("password")
+		// 从 Authorization header 获取 token
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(401, gin.H{
+				"code":    401,
+				"message": "Unauthorized",
+			})
+			c.Abort()
+			return
 		}
 
-		// 验证密码
-		if password != cfg.Auth.Password {
+		// 检查格式: "Bearer <token>"
+		const prefix = "Bearer "
+		if len(authHeader) < len(prefix) || authHeader[:len(prefix)] != prefix {
+			c.JSON(401, gin.H{
+				"code":    401,
+				"message": "Unauthorized",
+			})
+			c.Abort()
+			return
+		}
+
+		token := authHeader[len(prefix):]
+
+		// 简单验证: token 就是密码
+		if token != cfg.Auth.Password {
 			c.JSON(401, gin.H{
 				"code":    401,
 				"message": "Unauthorized",
