@@ -1,7 +1,7 @@
 package health
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -90,47 +90,45 @@ func (c *Checker) checkAllNodes() {
 
 // checkNode 检查单个节点
 func (c *Checker) checkNode(node *storage.ProxyNode) (int, bool) {
-	// 解析节点配置获取服务器地址和端口
-	var config map[string]interface{}
-	if err := json.Unmarshal([]byte(node.Config), &config); err != nil {
-		log.Errorf("Failed to parse node config: %v", err)
-		return 0, false
-	}
-
-	server, ok := config["server"].(string)
-	if !ok || server == "" {
-		log.Warnf("Node %d has no server address", node.ID)
-		return 0, false
-	}
-
-	port, ok := config["server_port"]
-	if !ok {
-		log.Warnf("Node %d has no server port", node.ID)
-		return 0, false
-	}
-
-	// 转换端口为整数
-	var serverPort int
-	switch v := port.(type) {
-	case float64:
-		serverPort = int(v)
-	case int:
-		serverPort = v
-	default:
-		log.Warnf("Node %d has invalid port type", node.ID)
-		return 0, false
-	}
-
-	// TCP连接测试
-	address := fmt.Sprintf("%s:%d", server, serverPort)
+	// 使用 DNS 查询测试节点可用性
+	// 通过节点的 TUN 接口查询 1.1.1.1 的 DNS 服务
 	start := time.Now()
 
-	conn, err := net.DialTimeout("tcp", address, 5*time.Second)
+	// 创建 DNS resolver，使用 1.1.1.1:53 作为 DNS 服务器
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			// 使用 TUN 接口的地址作为源地址
+			// 从 TUN 地址中提取 IP（去掉 /30）
+			tunAddr := node.TunAddress
+			if idx := len(tunAddr) - 3; idx > 0 && tunAddr[idx:] == "/30" {
+				tunAddr = tunAddr[:idx]
+			}
+
+			localAddr, err := net.ResolveTCPAddr(network, tunAddr+":0")
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve local address: %w", err)
+			}
+
+			dialer := &net.Dialer{
+				LocalAddr: localAddr,
+				Timeout:   5 * time.Second,
+			}
+
+			// 连接到 1.1.1.1:53
+			return dialer.DialContext(ctx, network, "1.1.1.1:53")
+		},
+	}
+
+	// 查询 cloudflare.com 的 A 记录
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := resolver.LookupHost(ctx, "cloudflare.com")
 	if err != nil {
-		log.Debugf("Node %d (%s) connection failed: %v", node.ID, node.Name, err)
+		log.Debugf("Node %d (%s) DNS query failed: %v", node.ID, node.Name, err)
 		return 0, false
 	}
-	defer conn.Close()
 
 	latency := int(time.Since(start).Milliseconds())
 
