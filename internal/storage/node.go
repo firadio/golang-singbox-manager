@@ -208,11 +208,10 @@ func GetTunNameByID(id int) string {
 
 // GetTunAddressByID 根据节点ID生成TUN地址
 func GetTunAddressByID(id int) string {
-	// 使用 172.16.0.1 作为基础地址，每个节点分配 /30 (4个IP)
-	// 公式: 172.16.0.1 + id*4
-	base := 172*256*256*256 + 16*256*256 + 0*256 + 1 // 172.16.0.1
-	offset := id * 4
-	ip := base + offset
+	// 使用 172.18.0.0/16 网段，每个节点分配 /30 (4个IP)
+	base := 172*256*256*256 + 18*256*256 // 172.18.0.0
+	offset := (id - 1) * 4
+	ip := base + offset + 1
 
 	return fmt.Sprintf("%d.%d.%d.%d/30",
 		(ip>>24)&0xFF, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF)
