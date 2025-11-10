@@ -72,12 +72,24 @@ func GenerateConfig(node *storage.ProxyNode, detourNode *storage.ProxyNode) (str
 
 	// 构建 outbounds 列表
 	outbounds := []interface{}{nodeOutbound}
-
-	// 递归获取所有中转节点链
-	currentDetour := detourNode
 	visited := make(map[int]bool) // 防止循环引用
 	visited[node.ID] = true
 
+	// 尝试从 config JSON 中获取 detour 引用
+	var currentDetour *storage.ProxyNode
+	if detourNode != nil {
+		currentDetour = detourNode
+	} else if detourTag, ok := nodeOutbound["detour"].(string); ok {
+		// 从 "node-X" 格式中提取 ID
+		var detourID int
+		if _, err := fmt.Sscanf(detourTag, "node-%d", &detourID); err == nil {
+			if detourNode, err := storage.GetNode(detourID); err == nil {
+				currentDetour = detourNode
+			}
+		}
+	}
+
+	// 递归获取所有中转节点链
 	for currentDetour != nil {
 		// 防止循环引用
 		if visited[currentDetour.ID] {
@@ -94,16 +106,17 @@ func GenerateConfig(node *storage.ProxyNode, detourNode *storage.ProxyNode) (str
 		detourOutbound["tag"] = detourTag
 		outbounds = append(outbounds, detourOutbound)
 
-		// 获取下一层中转节点
+		// 尝试从当前 detour 的 config 中继续查找下一层
+		var nextDetour *storage.ProxyNode
 		if currentDetour.DetourID != nil {
-			nextDetour, err := storage.GetNode(*currentDetour.DetourID)
-			if err != nil {
-				return "", fmt.Errorf("failed to get detour node %d: %w", *currentDetour.DetourID, err)
+			nextDetour, _ = storage.GetNode(*currentDetour.DetourID)
+		} else if nextDetourTag, ok := detourOutbound["detour"].(string); ok {
+			var detourID int
+			if _, err := fmt.Sscanf(nextDetourTag, "node-%d", &detourID); err == nil {
+				nextDetour, _ = storage.GetNode(detourID)
 			}
-			currentDetour = nextDetour
-		} else {
-			currentDetour = nil
 		}
+		currentDetour = nextDetour
 	}
 
 	// 构建路由规则

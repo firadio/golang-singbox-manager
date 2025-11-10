@@ -181,7 +181,18 @@ func (h *NodeHandler) UpdateNode(c *gin.Context) {
 	}
 
 	log.Infof("Node updated: %s (ID: %d)", existingNode.Name, existingNode.ID)
-	Success(c, existingNode)
+
+	// 提示用户重启节点以应用新配置
+	message := "节点已更新"
+	if existingNode.Status == "running" {
+		message = "节点已更新，请重启节点以应用新配置"
+	}
+
+	Success(c, gin.H{
+		"node": existingNode,
+		"message": message,
+		"need_restart": existingNode.Status == "running",
+	})
 }
 
 // DeleteNode 删除节点
