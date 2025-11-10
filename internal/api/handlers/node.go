@@ -107,6 +107,15 @@ func (h *NodeHandler) CreateNode(c *gin.Context) {
 	}
 	node.TableID = tableID
 
+	// 设置默认值
+	if node.InboundType == "" {
+		node.InboundType = "tun"
+	}
+	if node.InboundListen == "" {
+		node.InboundListen = "127.0.0.1"
+	}
+	// hijack_dns 默认已在数据库设置为 true
+
 	// 创建节点
 	if err := storage.CreateNode(&node); err != nil {
 		log.Errorf("Failed to create node: %v", err)
@@ -114,7 +123,7 @@ func (h *NodeHandler) CreateNode(c *gin.Context) {
 		return
 	}
 
-	// 自动分配 TunName 和 TunAddress
+	// 自动分配 TunName 和 TunAddress (即使是 HTTP/SOCKS5，也保留以兼容数据库约束)
 	node.TunName = storage.GetTunNameByID(node.ID)
 	node.TunAddress = storage.GetTunAddressByID(node.ID)
 	node.Status = "stopped"
@@ -154,6 +163,10 @@ func (h *NodeHandler) UpdateNode(c *gin.Context) {
 	existingNode.Name = updateData.Name
 	existingNode.Type = updateData.Type
 	existingNode.Config = updateData.Config
+	existingNode.InboundType = updateData.InboundType
+	existingNode.InboundListen = updateData.InboundListen
+	existingNode.InboundPort = updateData.InboundPort
+	existingNode.HijackDNS = updateData.HijackDNS
 	if updateData.DetourID != nil {
 		existingNode.DetourID = updateData.DetourID
 	}

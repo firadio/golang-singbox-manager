@@ -48,11 +48,14 @@ type RouteRule struct {
 	Protocol string `json:"protocol,omitempty"`
 }
 
-// Inbound 入站配置
+// Inbound 入站配置 (支持 TUN/HTTP/SOCKS5)
 type Inbound struct {
-	Type          string   `json:"type"`
-	InterfaceName string   `json:"interface_name"`
-	Address       []string `json:"address"`
+	Type          string   `json:"type"` // tun/http/socks5
+	InterfaceName string   `json:"interface_name,omitempty"` // for tun
+	Address       []string `json:"address,omitempty"` // for tun
+	Listen        string   `json:"listen,omitempty"` // for http/socks5
+	ListenPort    int      `json:"listen_port,omitempty"` // for http/socks5
+	Tag           string   `json:"tag,omitempty"` // for identification
 }
 
 // GenerateConfig 生成 sing-box 配置文件
@@ -103,6 +106,46 @@ func GenerateConfig(node *storage.ProxyNode, detourNode *storage.ProxyNode) (str
 		}
 	}
 
+	// 构建路由规则
+	routeRules := []RouteRule{
+		{Action: "sniff"},
+	}
+	// 根据 hijack_dns 配置添加 DNS 劫持规则
+	if node.HijackDNS {
+		routeRules = append(routeRules, RouteRule{Protocol: "dns", Action: "hijack-dns"})
+	}
+
+	// 构建入站配置
+	var inbounds []Inbound
+	switch node.InboundType {
+	case "http":
+		inbounds = []Inbound{
+			{
+				Type:       "http",
+				Listen:     node.InboundListen,
+				ListenPort: *node.InboundPort,
+				Tag:        "http-in",
+			},
+		}
+	case "socks5":
+		inbounds = []Inbound{
+			{
+				Type:       "socks",
+				Listen:     node.InboundListen,
+				ListenPort: *node.InboundPort,
+				Tag:        "socks-in",
+			},
+		}
+	default: // tun
+		inbounds = []Inbound{
+			{
+				Type:          "tun",
+				InterfaceName: node.TunName,
+				Address:       []string{node.TunAddress},
+			},
+		}
+	}
+
 	// 构建完整配置
 	config := &SingBoxConfig{
 		Log: LogConfig{
@@ -119,19 +162,10 @@ func GenerateConfig(node *storage.ProxyNode, detourNode *storage.ProxyNode) (str
 			},
 		},
 		Route: RouteConfig{
-			Rules: []RouteRule{
-				{Action: "sniff"},
-				{Protocol: "dns", Action: "hijack-dns"},
-			},
+			Rules: routeRules,
 			Final: nodeTag,
 		},
-		Inbounds: []Inbound{
-			{
-				Type:          "tun",
-				InterfaceName: node.TunName,
-				Address:       []string{node.TunAddress},
-			},
-		},
+		Inbounds:  inbounds,
 		Outbounds: outbounds,
 	}
 

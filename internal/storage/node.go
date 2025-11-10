@@ -9,12 +9,14 @@ import (
 // CreateNode 创建节点
 func CreateNode(node *ProxyNode) error {
 	query := `INSERT INTO proxy_nodes
-		(name, type, config, detour_id, tun_name, tun_address, table_id, enabled, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		(name, type, config, detour_id, tun_name, tun_address, table_id,
+		 inbound_type, inbound_listen, inbound_port, hijack_dns, enabled, status)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := db.Exec(query,
 		node.Name, node.Type, node.Config, node.DetourID,
 		node.TunName, node.TunAddress, node.TableID,
+		node.InboundType, node.InboundListen, node.InboundPort, node.HijackDNS,
 		node.Enabled, node.Status,
 	)
 	if err != nil {
@@ -36,13 +38,15 @@ func CreateNode(node *ProxyNode) error {
 // GetNode 获取单个节点
 func GetNode(id int) (*ProxyNode, error) {
 	query := `SELECT id, name, type, config, detour_id, tun_name, tun_address,
-		table_id, enabled, status, pid, created_at, updated_at
+		table_id, inbound_type, inbound_listen, inbound_port, hijack_dns,
+		enabled, status, pid, created_at, updated_at
 		FROM proxy_nodes WHERE id = ?`
 
 	node := &ProxyNode{}
 	err := db.QueryRow(query, id).Scan(
 		&node.ID, &node.Name, &node.Type, &node.Config, &node.DetourID,
 		&node.TunName, &node.TunAddress, &node.TableID,
+		&node.InboundType, &node.InboundListen, &node.InboundPort, &node.HijackDNS,
 		&node.Enabled, &node.Status, &node.Pid,
 		&node.CreatedAt, &node.UpdatedAt,
 	)
@@ -60,7 +64,8 @@ func GetNode(id int) (*ProxyNode, error) {
 // GetAllNodes 获取所有节点
 func GetAllNodes() ([]*ProxyNode, error) {
 	query := `SELECT id, name, type, config, detour_id, tun_name, tun_address,
-		table_id, enabled, status, pid, created_at, updated_at
+		table_id, inbound_type, inbound_listen, inbound_port, hijack_dns,
+		enabled, status, pid, created_at, updated_at
 		FROM proxy_nodes ORDER BY id`
 
 	rows, err := db.Query(query)
@@ -75,6 +80,7 @@ func GetAllNodes() ([]*ProxyNode, error) {
 		err := rows.Scan(
 			&node.ID, &node.Name, &node.Type, &node.Config, &node.DetourID,
 			&node.TunName, &node.TunAddress, &node.TableID,
+			&node.InboundType, &node.InboundListen, &node.InboundPort, &node.HijackDNS,
 			&node.Enabled, &node.Status, &node.Pid,
 			&node.CreatedAt, &node.UpdatedAt,
 		)
@@ -90,7 +96,8 @@ func GetAllNodes() ([]*ProxyNode, error) {
 // GetEnabledNodes 获取所有启用的节点
 func GetEnabledNodes() ([]*ProxyNode, error) {
 	query := `SELECT id, name, type, config, detour_id, tun_name, tun_address,
-		table_id, enabled, status, pid, created_at, updated_at
+		table_id, inbound_type, inbound_listen, inbound_port, hijack_dns,
+		enabled, status, pid, created_at, updated_at
 		FROM proxy_nodes WHERE enabled = 1 ORDER BY id`
 
 	rows, err := db.Query(query)
@@ -105,6 +112,7 @@ func GetEnabledNodes() ([]*ProxyNode, error) {
 		err := rows.Scan(
 			&node.ID, &node.Name, &node.Type, &node.Config, &node.DetourID,
 			&node.TunName, &node.TunAddress, &node.TableID,
+			&node.InboundType, &node.InboundListen, &node.InboundPort, &node.HijackDNS,
 			&node.Enabled, &node.Status, &node.Pid,
 			&node.CreatedAt, &node.UpdatedAt,
 		)
@@ -122,6 +130,7 @@ func UpdateNode(node *ProxyNode) error {
 	query := `UPDATE proxy_nodes SET
 		name = ?, type = ?, config = ?, detour_id = ?,
 		tun_name = ?, tun_address = ?, table_id = ?,
+		inbound_type = ?, inbound_listen = ?, inbound_port = ?, hijack_dns = ?,
 		enabled = ?, status = ?, pid = ?, updated_at = ?
 		WHERE id = ?`
 
@@ -130,6 +139,7 @@ func UpdateNode(node *ProxyNode) error {
 	result, err := db.Exec(query,
 		node.Name, node.Type, node.Config, node.DetourID,
 		node.TunName, node.TunAddress, node.TableID,
+		node.InboundType, node.InboundListen, node.InboundPort, node.HijackDNS,
 		node.Enabled, node.Status, node.Pid, node.UpdatedAt,
 		node.ID,
 	)

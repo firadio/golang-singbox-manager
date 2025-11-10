@@ -51,6 +51,40 @@
                     <small>通过其他节点进行中转，实现链式代理</small>
                 </div>
 
+                <!-- 入站配置 -->
+                <div class="form-group">
+                    <label>入站类型 *</label>
+                    <select id="inbound-type" onchange="updateInboundFields()">
+                        <option value="tun">TUN (透明代理)</option>
+                        <option value="http">HTTP 代理</option>
+                        <option value="socks5">SOCKS5 代理</option>
+                    </select>
+                    <small>选择代理流量的入站方式</small>
+                </div>
+
+                <!-- HTTP/SOCKS5 入站配置 -->
+                <div id="proxy-inbound-fields" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>监听地址 *</label>
+                            <input type="text" id="inbound-listen" placeholder="127.0.0.1" value="127.0.0.1">
+                        </div>
+                        <div class="form-group">
+                            <label>监听端口 *</label>
+                            <input type="number" id="inbound-port" placeholder="1080">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DNS 劫持选项 -->
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="hijack-dns" checked>
+                        <label>启用 DNS 劫持 (hijack-dns)</label>
+                    </div>
+                    <small>建议 SOCKS5 开启此选项，因为 SOCKS5 通常不支持 UDP</small>
+                </div>
+
                 <!-- 配置区域 -->
                 <div class="form-group">
                     <label>配置</label>
@@ -412,6 +446,18 @@ function updateNodeTypeFields() {
     const fields = document.getElementById(type + '-fields');
     if (fields) {
         fields.style.display = 'block';
+    }
+}
+
+// 更新入站配置字段显示
+function updateInboundFields() {
+    const inboundType = document.getElementById('inbound-type').value;
+    const proxyFields = document.getElementById('proxy-inbound-fields');
+
+    if (inboundType === 'http' || inboundType === 'socks5') {
+        proxyFields.style.display = 'block';
+    } else {
+        proxyFields.style.display = 'none';
     }
 }
 
@@ -1023,6 +1069,7 @@ async function showCreateNodeModal() {
     // 重置模式为表单模式
     switchConfigMode('form');
     updateNodeTypeFields();
+    updateInboundFields(); // 重置入站字段显示
 
     // 加载中转节点选项
     await loadDetourOptions();
@@ -1089,10 +1136,26 @@ async function saveNode(e) {
     const url = isEdit ? `${API_BASE}/nodes/${nodeId}` : `${API_BASE}/nodes`;
     const method = isEdit ? 'PUT' : 'POST';
 
+    // 获取中转节点ID
+    const detourSelect = document.getElementById('node-detour');
+    const detourId = detourSelect.value ? parseInt(detourSelect.value) : null;
+
+    // 获取入站配置
+    const inboundType = document.getElementById('inbound-type').value;
+    const inboundListen = document.getElementById('inbound-listen').value || '127.0.0.1';
+    const inboundPortValue = document.getElementById('inbound-port').value;
+    const inboundPort = inboundPortValue ? parseInt(inboundPortValue) : null;
+    const hijackDns = document.getElementById('hijack-dns').checked;
+
     const requestBody = {
         name,
         type,
         config: configText,
+        detour_id: detourId,
+        inbound_type: inboundType,
+        inbound_listen: inboundListen,
+        inbound_port: inboundPort,
+        hijack_dns: hijackDns,
         enabled: true
     };
 
@@ -1201,6 +1264,20 @@ async function editNode(id) {
 
             // 填充公共字段：节点名称
             document.getElementById('node-name').value = node.name;
+
+            // 填充入站配置
+            document.getElementById('inbound-type').value = node.inbound_type || 'tun';
+            document.getElementById('inbound-listen').value = node.inbound_listen || '127.0.0.1';
+            if (node.inbound_port) {
+                document.getElementById('inbound-port').value = node.inbound_port;
+            }
+            document.getElementById('hijack-dns').checked = node.hijack_dns !== false; // 默认 true
+            updateInboundFields(); // 更新入站字段显示
+
+            // 设置中转节点
+            if (node.detour_id) {
+                document.getElementById('node-detour').value = node.detour_id;
+            }
 
             // 填充表单模式配置
             loadConfigToForm(config);

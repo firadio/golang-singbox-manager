@@ -143,5 +143,58 @@ func migrate() error {
 	}
 
 	log.Info("Database migration completed")
+
+	// 添加新列（如果不存在）
+	if err := addColumnsIfNotExist(); err != nil {
+		return fmt.Errorf("failed to add new columns: %w", err)
+	}
+
+	return nil
+}
+
+// addColumnsIfNotExist 添加新列（如果不存在）
+func addColumnsIfNotExist() error {
+	// 检查 proxy_nodes 表中是否存在新列
+	columns := []struct {
+		name         string
+		definition   string
+		defaultValue string
+	}{
+		{"inbound_type", "TEXT DEFAULT 'tun'", "'tun'"},
+		{"inbound_listen", "TEXT DEFAULT '127.0.0.1'", "'127.0.0.1'"},
+		{"inbound_port", "INTEGER", "NULL"},
+		{"hijack_dns", "BOOLEAN DEFAULT 1", "1"},
+	}
+
+	// 获取现有列
+	rows, err := db.Query("PRAGMA table_info(proxy_nodes)")
+	if err != nil {
+		return fmt.Errorf("failed to get table info: %w", err)
+	}
+	defer rows.Close()
+
+	existingColumns := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dfltValue sql.NullString
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			return fmt.Errorf("failed to scan column info: %w", err)
+		}
+		existingColumns[name] = true
+	}
+
+	// 添加不存在的列
+	for _, col := range columns {
+		if !existingColumns[col.name] {
+			alterSQL := fmt.Sprintf("ALTER TABLE proxy_nodes ADD COLUMN %s %s", col.name, col.definition)
+			if _, err := db.Exec(alterSQL); err != nil {
+				return fmt.Errorf("failed to add column %s: %w", col.name, err)
+			}
+			log.Infof("Added column %s to proxy_nodes table", col.name)
+		}
+	}
+
 	return nil
 }

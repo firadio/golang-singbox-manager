@@ -4,19 +4,23 @@ import "time"
 
 // ProxyNode 代理节点模型
 type ProxyNode struct {
-	ID         int       `json:"id" db:"id"`
-	Name       string    `json:"name" db:"name"`
-	Type       string    `json:"type" db:"type"` // socks/vless/vmess/trojan
-	Config     string    `json:"config" db:"config"`
-	DetourID   *int      `json:"detour_id,omitempty" db:"detour_id"`
-	TunName    string    `json:"tun_name" db:"tun_name"`
-	TunAddress string    `json:"tun_address" db:"tun_address"`
-	TableID    int       `json:"table_id" db:"table_id"`
-	Enabled    bool      `json:"enabled" db:"enabled"`
-	Status     string    `json:"status" db:"status"` // stopped/starting/running/error
-	Pid        int       `json:"pid,omitempty" db:"pid"`
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
+	ID            int       `json:"id" db:"id"`
+	Name          string    `json:"name" db:"name"`
+	Type          string    `json:"type" db:"type"` // socks/vless/vmess/trojan
+	Config        string    `json:"config" db:"config"`
+	DetourID      *int      `json:"detour_id,omitempty" db:"detour_id"`
+	TunName       string    `json:"tun_name" db:"tun_name"`
+	TunAddress    string    `json:"tun_address" db:"tun_address"`
+	TableID       int       `json:"table_id" db:"table_id"`
+	InboundType   string    `json:"inbound_type" db:"inbound_type"`       // tun/http/socks5
+	InboundListen string    `json:"inbound_listen" db:"inbound_listen"`   // listen address for http/socks5
+	InboundPort   *int      `json:"inbound_port,omitempty" db:"inbound_port"` // listen port for http/socks5
+	HijackDNS     bool      `json:"hijack_dns" db:"hijack_dns"`           // enable DNS hijacking
+	Enabled       bool      `json:"enabled" db:"enabled"`
+	Status        string    `json:"status" db:"status"` // stopped/starting/running/error
+	Pid           int       `json:"pid,omitempty" db:"pid"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // RoutingRule 路由规则模型
