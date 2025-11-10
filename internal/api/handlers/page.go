@@ -33,12 +33,12 @@ func (h *PageHandler) RenderPortMappings(c *gin.Context) {
 	})
 }
 
-// RenderNodes 渲染节点管理页面
+// RenderNodes 渲染代理节点页面
 func (h *PageHandler) RenderNodes(c *gin.Context) {
 	c.HTML(200, "nodes-page", gin.H{
-		"Title":       "节点管理",
+		"Title":       "代理节点",
 		"CurrentPage": "nodes",
-		"PageTitle":   "节点管理",
+		"PageTitle":   "代理节点管理",
 		"PageActions": []PageAction{
 			{Text: "+ 创建节点", Class: "btn btn-primary", OnClick: template.JS("showCreateNodeModal()")},
 		},

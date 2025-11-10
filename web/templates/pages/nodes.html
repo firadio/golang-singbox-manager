@@ -61,6 +61,14 @@
                         </select>
                     </div>
 
+                    <div class="form-group">
+                        <label>中转节点 (Detour)</label>
+                        <select id="node-detour-form">
+                            <option value="">无 (直连)</option>
+                        </select>
+                        <small>通过其他节点进行中转，实现链式代理</small>
+                    </div>
+
                     <!-- SOCKS 配置 -->
                     <div id="socks-fields" class="node-type-fields">
                         <div class="form-row">
@@ -305,6 +313,33 @@
     </div>
 </div>
 
+<!-- 配置查看器模态框 -->
+<div id="configViewerModal" class="modal">
+    <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-header">
+            <h3 id="config-modal-title">节点配置</h3>
+            <button class="modal-close" onclick="closeModal('configViewerModal')">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <div class="form-group">
+                <label>配置文件路径</label>
+                <input type="text" id="config-file-path" readonly style="background: #f3f4f6;">
+            </div>
+
+            <div class="form-group">
+                <label>完整配置 (JSON)</label>
+                <textarea id="config-content" readonly style="min-height: 500px; font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 15px;"></textarea>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn btn-success" onclick="downloadNodeConfig()">下载配置</button>
+            <button class="btn" onclick="closeModal('configViewerModal')">关闭</button>
+        </div>
+    </div>
+</div>
+
 <script>
 // ===== 节点管理模块 =====
 
@@ -433,6 +468,12 @@ function buildConfigFromForm() {
         if (sni) config.tls.server_name = sni;
     }
 
+    // 处理中转节点 (Detour)
+    const detour = document.getElementById('node-detour-form').value;
+    if (detour) {
+        config.detour = detour;
+    }
+
     return config;
 }
 
@@ -441,6 +482,9 @@ function loadConfigToForm(config) {
     const type = config.type;
     document.getElementById('node-type-form').value = type;
     updateNodeTypeFields();
+
+    // 加载中转节点
+    document.getElementById('node-detour-form').value = config.detour || '';
 
     if (type === 'socks') {
         document.getElementById('socks-server').value = config.server || '';
@@ -862,6 +906,33 @@ function generateUrlFromJson() {
     }
 }
 
+// 加载中转节点选项
+async function loadDetourOptions(currentNodeId = null) {
+    const select = document.getElementById('node-detour-form');
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes`);
+        const data = await res.json();
+
+        // 清空并重置选项
+        select.innerHTML = '<option value="">无 (直连)</option>';
+
+        if (data.data && data.data.length > 0) {
+            data.data.forEach(node => {
+                // 不能选择自己作为中转节点
+                if (currentNodeId && node.id == currentNodeId) return;
+
+                const option = document.createElement('option');
+                option.value = `node-${node.id}`;
+                option.textContent = `${node.name} (${node.type.toUpperCase()})`;
+                select.appendChild(option);
+            });
+        }
+    } catch (e) {
+        console.error('加载中转节点选项失败:', e);
+    }
+}
+
 // 加载节点列表
 async function loadNodes() {
     const tbody = document.getElementById('nodes-tbody');
@@ -922,6 +993,7 @@ async function loadNodes() {
                         }
                         <button class="btn btn-sm" onclick="restartNode(${node.id})">重启</button>
                         <button class="btn btn-sm" onclick="viewNodeLogs(${node.id}, '${node.name}')">查看日志</button>
+                        <button class="btn btn-sm" onclick="viewNodeConfig(${node.id}, '${node.name}')">查看配置</button>
                         <button class="btn btn-sm" onclick="editNode(${node.id})">编辑</button>
                         <button class="btn btn-sm btn-danger" onclick="deleteNode(${node.id}, '${node.name}')">删除</button>
                     </div>
@@ -947,6 +1019,9 @@ async function showCreateNodeModal() {
     // 重置模式为表单模式
     switchConfigMode('form');
     updateNodeTypeFields();
+
+    // 加载中转节点选项
+    await loadDetourOptions();
 
     openModal('createNodeModal');
 }
@@ -1125,6 +1200,9 @@ async function editNode(id) {
             document.getElementById('node-submit-btn').textContent = '保存';
             document.getElementById('node-id').value = node.id;
 
+            // 加载中转节点选项 (排除当前节点)
+            await loadDetourOptions(node.id);
+
             // 填充表单模式数据
             document.getElementById('node-name-form').value = node.name;
             loadConfigToForm(config);
@@ -1155,6 +1233,102 @@ async function editNode(id) {
         console.error('编辑节点失败:', e);
         showToast('获取节点信息失败', 'error');
     }
+}
+
+// ===== 配置查看功能 =====
+
+// 查看节点完整配置
+async function viewNodeConfig(nodeId, nodeName) {
+    try {
+        // 获取节点配置文件内容
+        const res = await authFetch(`${API_BASE}/nodes/${nodeId}`);
+        const data = await res.json();
+
+        if (data.code === 0 && data.data) {
+            const node = data.data;
+
+            // 显示配置文件路径
+            const configPath = `configs/singbox/node_${nodeId}.json`;
+            document.getElementById('config-file-path').value = configPath;
+
+            // 显示完整配置
+            // 注意：node.config只包含outbound配置，需要构建完整的sing-box配置
+            const outboundConfig = JSON.parse(node.config);
+
+            // 构建完整的sing-box配置文件
+            const fullConfig = {
+                "log": {
+                    "level": "info"
+                },
+                "dns": {
+                    "servers": [
+                        {
+                            "tag": "dns",
+                            "type": "tls",
+                            "server": "1.0.0.1",
+                            "detour": `node-${nodeId}`
+                        }
+                    ]
+                },
+                "route": {
+                    "rules": [
+                        {
+                            "action": "sniff"
+                        },
+                        {
+                            "action": "hijack-dns",
+                            "protocol": "dns"
+                        }
+                    ],
+                    "final": `node-${nodeId}`
+                },
+                "inbounds": [
+                    {
+                        "type": "tun",
+                        "interface_name": node.tun_name,
+                        "address": [
+                            `${node.tun_ip}/30`
+                        ]
+                    }
+                ],
+                "outbounds": [
+                    {
+                        ...outboundConfig,
+                        "tag": `node-${nodeId}`
+                    }
+                ]
+            };
+
+            document.getElementById('config-content').value = JSON.stringify(fullConfig, null, 2);
+            document.getElementById('config-modal-title').textContent = `节点配置 - ${nodeName}`;
+
+            openModal('configViewerModal');
+        } else {
+            showToast('获取节点配置失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        console.error('查看节点配置失败:', e);
+        showToast('获取节点配置失败', 'error');
+    }
+}
+
+// 下载节点配置
+function downloadNodeConfig() {
+    const config = document.getElementById('config-content').value;
+    const path = document.getElementById('config-file-path').value;
+    const filename = path.split('/').pop();
+
+    const blob = new Blob([config], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast('配置文件已下载', 'success');
 }
 
 // ===== 日志查看功能 =====
