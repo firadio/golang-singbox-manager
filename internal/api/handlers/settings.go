@@ -167,6 +167,7 @@ func (h *SettingsHandler) Login(c *gin.Context) {
 	}
 
 	// 设置 cookie（使用密码作为 session_token）
+	c.SetSameSite(2) // SameSiteLaxMode = 2
 	c.SetCookie(
 		"session_token",        // name
 		h.config.Auth.Password, // value
