@@ -51,28 +51,16 @@
                     <small>通过其他节点进行中转，实现链式代理</small>
                 </div>
 
-                <!-- 入站配置 -->
+                <!-- 入站配置说明 -->
                 <div class="form-group">
-                    <label>入站类型 *</label>
-                    <select id="inbound-type" onchange="updateInboundFields()">
-                        <option value="tun">TUN (透明代理)</option>
-                        <option value="http">HTTP 代理</option>
-                        <option value="socks5">SOCKS5 代理</option>
-                    </select>
-                    <small>选择代理流量的入站方式</small>
-                </div>
-
-                <!-- HTTP/SOCKS5 入站配置 -->
-                <div id="proxy-inbound-fields" style="display: none;">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>监听地址 *</label>
-                            <input type="text" id="inbound-listen" placeholder="127.0.0.1" value="127.0.0.1">
-                        </div>
-                        <div class="form-group">
-                            <label>监听端口 *</label>
-                            <input type="number" id="inbound-port" placeholder="1080">
-                        </div>
+                    <div class="info-box" style="background: #e8f4f8; padding: 10px; border-radius: 4px; border-left: 4px solid #0066cc;">
+                        <strong>📡 入站配置 (自动)</strong>
+                        <p style="margin: 5px 0 0 0; font-size: 13px;">系统自动为每个节点配置三种入站方式：</p>
+                        <ul style="margin: 5px 0 0 20px; font-size: 13px;">
+                            <li><strong>TUN</strong> - 透明代理 (自动路由)</li>
+                            <li><strong>HTTP</strong> - 端口 8000 + 节点ID (监听 ::)</li>
+                            <li><strong>SOCKS5</strong> - 端口 5000 + 节点ID (监听 ::)</li>
+                        </ul>
                     </div>
                 </div>
 
@@ -82,7 +70,7 @@
                         <input type="checkbox" id="hijack-dns" checked>
                         <label>启用 DNS 劫持 (hijack-dns)</label>
                     </div>
-                    <small>建议 SOCKS5 开启此选项，因为 SOCKS5 通常不支持 UDP</small>
+                    <small>推荐开启，可以劫持 DNS 请求通过代理解析</small>
                 </div>
 
                 <!-- 配置区域 -->
@@ -297,6 +285,167 @@
     </div>
 </div>
 
+<!-- 延迟详情模态框 -->
+<div id="latencyDetailModal" class="modal">
+    <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3 id="latency-modal-title">延迟检测详情</h3>
+            <button class="modal-close" onclick="closeModal('latencyDetailModal')">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- 节点信息 -->
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #6b7280;">节点信息</h4>
+                <div style="display: flex; gap: 20px;">
+                    <div><strong>ID:</strong> <span id="latency-node-id">-</span></div>
+                    <div><strong>名称:</strong> <span id="latency-node-name">-</span></div>
+                </div>
+            </div>
+
+            <!-- 测试配置 -->
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">测试次数</label>
+                <select id="latency-test-count" style="width: 150px; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px;">
+                    <option value="3">3次</option>
+                    <option value="5" selected>5次</option>
+                    <option value="10">10次</option>
+                </select>
+                <button class="btn btn-primary" onclick="startLatencyTest()" id="start-test-btn" style="margin-left: 10px;">
+                    开始检测
+                </button>
+            </div>
+
+            <!-- 实时测试结果 -->
+            <div style="margin-bottom: 20px;">
+                <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #6b7280;">实时测试结果</h4>
+
+                <!-- TUN测试结果 -->
+                <div class="latency-test-section">
+                    <div class="latency-test-header">
+                        <span style="font-weight: 600;">🔵 TUN (透明代理)</span>
+                        <span id="tun-status" class="test-status">等待测试...</span>
+                    </div>
+                    <div class="latency-test-progress">
+                        <div id="tun-progress" class="progress-bar"></div>
+                    </div>
+                    <div id="tun-results" class="latency-test-results"></div>
+                    <div id="tun-summary" class="latency-summary" style="display: none;">
+                        <strong>平均延迟:</strong> <span id="tun-avg">-</span>ms
+                        <strong style="margin-left: 15px;">成功率:</strong> <span id="tun-success">-</span>%
+                    </div>
+                </div>
+
+                <!-- HTTP测试结果 -->
+                <div class="latency-test-section">
+                    <div class="latency-test-header">
+                        <span style="font-weight: 600;">🟢 HTTP (端口 <span id="http-port">-</span>)</span>
+                        <span id="http-status" class="test-status">等待测试...</span>
+                    </div>
+                    <div class="latency-test-progress">
+                        <div id="http-progress" class="progress-bar"></div>
+                    </div>
+                    <div id="http-results" class="latency-test-results"></div>
+                    <div id="http-summary" class="latency-summary" style="display: none;">
+                        <strong>平均延迟:</strong> <span id="http-avg">-</span>ms
+                        <strong style="margin-left: 15px;">成功率:</strong> <span id="http-success">-</span>%
+                    </div>
+                </div>
+
+                <!-- SOCKS5测试结果 -->
+                <div class="latency-test-section">
+                    <div class="latency-test-header">
+                        <span style="font-weight: 600;">🟣 SOCKS5 (端口 <span id="socks5-port">-</span>)</span>
+                        <span id="socks5-status" class="test-status">等待测试...</span>
+                    </div>
+                    <div class="latency-test-progress">
+                        <div id="socks5-progress" class="progress-bar"></div>
+                    </div>
+                    <div id="socks5-results" class="latency-test-results"></div>
+                    <div id="socks5-summary" class="latency-summary" style="display: none;">
+                        <strong>平均延迟:</strong> <span id="socks5-avg">-</span>ms
+                        <strong style="margin-left: 15px;">成功率:</strong> <span id="socks5-success">-</span>%
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button type="button" class="btn" onclick="closeModal('latencyDetailModal')">关闭</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.latency-test-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f9fafb;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.latency-test-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.test-status {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.latency-test-progress {
+    height: 6px;
+    background: #e5e7eb;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.latency-test-results {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 30px;
+}
+
+.latency-result-item {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.latency-result-success {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.latency-result-fail {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.latency-summary {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 13px;
+    color: #374151;
+}
+</style>
+
 <!-- 节点日志查看器模态框 -->
 <div id="logViewerModal" class="modal">
     <div class="modal-content" style="max-width: 900px;">
@@ -446,18 +595,6 @@ function updateNodeTypeFields() {
     const fields = document.getElementById(type + '-fields');
     if (fields) {
         fields.style.display = 'block';
-    }
-}
-
-// 更新入站配置字段显示
-function updateInboundFields() {
-    const inboundType = document.getElementById('inbound-type').value;
-    const proxyFields = document.getElementById('proxy-inbound-fields');
-
-    if (inboundType === 'http' || inboundType === 'socks5') {
-        proxyFields.style.display = 'block';
-    } else {
-        proxyFields.style.display = 'none';
     }
 }
 
@@ -1009,21 +1146,63 @@ async function loadNodes() {
             } catch (e) {}
             const server = config.server || '-';
 
-            // 计算延迟显示
+            // 计算延迟显示（使用HTTP延迟作为主要指标）
             let latencyHtml = '';
             if (node.status !== 'running') {
-                latencyHtml = '<span class="latency latency-unavailable">-</span>';
-            } else if (!node.available) {
-                latencyHtml = '<span class="latency latency-unavailable">离线</span>';
+                latencyHtml = '<span class="latency latency-unavailable" style="cursor: not-allowed;">-</span>';
             } else {
-                const latency = node.latency || 0;
-                let latencyClass = 'latency-excellent';
-                if (latency > 300) {
-                    latencyClass = 'latency-poor';
-                } else if (latency > 100) {
-                    latencyClass = 'latency-good';
+                const httpLatency = node.http_latency || 0;
+                let latencyColor, latencyIcon, latencyStatus;
+
+                if (httpLatency === 0) {
+                    // 红灯 - 不可用
+                    latencyColor = '#ef4444';
+                    latencyIcon = '🔴';
+                    latencyStatus = '离线';
+                } else if (httpLatency > 2000) {
+                    // 橙灯 - 延迟很高
+                    latencyColor = '#f97316';
+                    latencyIcon = '🟠';
+                    latencyStatus = '较慢';
+                } else if (httpLatency > 1000) {
+                    // 黄灯 - 延迟较高
+                    latencyColor = '#eab308';
+                    latencyIcon = '🟡';
+                    latencyStatus = '一般';
+                } else {
+                    // 绿灯 - 正常
+                    latencyColor = '#22c55e';
+                    latencyIcon = '🟢';
+                    latencyStatus = '良好';
                 }
-                latencyHtml = `<span class="latency ${latencyClass}">${latency}ms</span>`;
+
+                latencyHtml = `
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <span
+                            class="latency-indicator"
+                            onclick="openLatencyDetail(${node.id}, event)"
+                            style="
+                                cursor: pointer;
+                                padding: 4px 10px;
+                                border-radius: 12px;
+                                background: ${latencyColor}15;
+                                border: 1.5px solid ${latencyColor};
+                                color: ${latencyColor};
+                                font-size: 12px;
+                                font-weight: 600;
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 4px;
+                                transition: all 0.2s;
+                            "
+                            onmouseover="this.style.transform='scale(1.05)'"
+                            onmouseout="this.style.transform='scale(1)'"
+                            title="点击查看详细延迟信息"
+                        >
+                            <span>${httpLatency > 0 ? httpLatency + 'ms' : latencyStatus}</span>
+                        </span>
+                    </div>
+                `;
             }
 
             return `
@@ -1140,11 +1319,7 @@ async function saveNode(e) {
     const detourSelect = document.getElementById('node-detour');
     const detourId = detourSelect.value ? parseInt(detourSelect.value) : null;
 
-    // 获取入站配置
-    const inboundType = document.getElementById('inbound-type').value;
-    const inboundListen = document.getElementById('inbound-listen').value || '127.0.0.1';
-    const inboundPortValue = document.getElementById('inbound-port').value;
-    const inboundPort = inboundPortValue ? parseInt(inboundPortValue) : null;
+    // 获取DNS劫持配置
     const hijackDns = document.getElementById('hijack-dns').checked;
 
     const requestBody = {
@@ -1152,9 +1327,6 @@ async function saveNode(e) {
         type,
         config: configText,
         detour_id: detourId,
-        inbound_type: inboundType,
-        inbound_listen: inboundListen,
-        inbound_port: inboundPort,
         hijack_dns: hijackDns,
         enabled: true
     };
@@ -1244,6 +1416,253 @@ async function deleteNode(id, name) {
     }
 }
 
+// 手动检测节点延迟
+async function checkNodeLatency(nodeId, event) {
+    event.stopPropagation();
+    const button = event.currentTarget;
+    const originalContent = button.innerHTML;
+
+    // 显示加载状态
+    button.disabled = true;
+    button.innerHTML = '<span style="font-size: 14px;">⏳</span>';
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes/${nodeId}/check`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+
+        if (data.code === 0) {
+            showToast('延迟检测完成', 'success');
+            // 重新加载节点列表以显示更新后的延迟
+            await loadNodes();
+        } else {
+            showToast('延迟检测失败: ' + data.message, 'error');
+            button.disabled = false;
+            button.innerHTML = originalContent;
+        }
+    } catch (error) {
+        showToast('延迟检测失败: ' + error.message, 'error');
+        button.disabled = false;
+        button.innerHTML = originalContent;
+    }
+}
+
+// 全局变量存储当前测试的节点信息和会话ID
+let currentLatencyTestNode = null;
+let currentTestSessionId = null;
+let activeEventSources = [];
+
+// 打开延迟详情模态框
+async function openLatencyDetail(nodeId, event) {
+    event.stopPropagation();
+
+    // 关闭之前的SSE连接
+    activeEventSources.forEach(es => es.close());
+    activeEventSources = [];
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes/${nodeId}`);
+        const data = await res.json();
+
+        if (data.code === 0 && data.data) {
+            const node = data.data;
+            currentLatencyTestNode = node;
+
+            // 生成新的会话ID，用于识别这次测试
+            currentTestSessionId = Date.now() + '_' + Math.random();
+
+            // 填充节点信息
+            document.getElementById('latency-node-id').textContent = node.id;
+            document.getElementById('latency-node-name').textContent = node.name;
+
+            // 计算并显示端口
+            const httpPort = 8000 + node.id;
+            const socks5Port = 5000 + node.id;
+            document.getElementById('http-port').textContent = httpPort;
+            document.getElementById('socks5-port').textContent = socks5Port;
+
+            // 重置所有测试结果
+            resetLatencyTestResults();
+
+            // 打开模态框
+            openModal('latencyDetailModal');
+        } else {
+            showToast('获取节点信息失败: ' + data.message, 'error');
+        }
+    } catch (error) {
+        showToast('获取节点信息失败: ' + error.message, 'error');
+    }
+}
+
+// 重置延迟测试结果
+function resetLatencyTestResults() {
+    const types = ['tun', 'http', 'socks5'];
+    types.forEach(type => {
+        document.getElementById(`${type}-status`).textContent = '等待测试...';
+        document.getElementById(`${type}-progress`).style.width = '0%';
+        document.getElementById(`${type}-results`).innerHTML = '';
+        document.getElementById(`${type}-summary`).style.display = 'none';
+    });
+}
+
+// 开始延迟测试（使用SSE流式推送）
+function startLatencyTest() {
+    if (!currentLatencyTestNode) {
+        showToast('未选择节点', 'error');
+        return;
+    }
+
+    const testCount = parseInt(document.getElementById('latency-test-count').value);
+    const startBtn = document.getElementById('start-test-btn');
+    const nodeId = currentLatencyTestNode.id;
+
+    // 禁用开始按钮
+    startBtn.disabled = true;
+    startBtn.textContent = '测试中...';
+
+    // 重置结果
+    resetLatencyTestResults();
+
+    // 生成新的测试会话ID
+    const testSessionId = Date.now() + '_' + Math.random();
+    currentTestSessionId = testSessionId;
+
+    // 关闭之前的连接
+    activeEventSources.forEach(es => es.close());
+    activeEventSources = [];
+
+    // 准备元素映射
+    const elements = {
+        tun: {
+            status: document.getElementById('tun-status'),
+            progress: document.getElementById('tun-progress'),
+            results: document.getElementById('tun-results'),
+            summary: document.getElementById('tun-summary'),
+            avg: document.getElementById('tun-avg'),
+            success: document.getElementById('tun-success'),
+            latencies: [],
+            completed: 0
+        },
+        http: {
+            status: document.getElementById('http-status'),
+            progress: document.getElementById('http-progress'),
+            results: document.getElementById('http-results'),
+            summary: document.getElementById('http-summary'),
+            avg: document.getElementById('http-avg'),
+            success: document.getElementById('http-success'),
+            latencies: [],
+            completed: 0
+        },
+        socks5: {
+            status: document.getElementById('socks5-status'),
+            progress: document.getElementById('socks5-progress'),
+            results: document.getElementById('socks5-results'),
+            summary: document.getElementById('socks5-summary'),
+            avg: document.getElementById('socks5-avg'),
+            success: document.getElementById('socks5-success'),
+            latencies: [],
+            completed: 0
+        }
+    };
+
+    let completedProtocols = 0;
+
+    // 并发启动3个SSE连接，分别测试TUN、HTTP、SOCKS5
+    ['tun', 'http', 'socks5'].forEach(protocol => {
+        const element = elements[protocol];
+        element.status.textContent = '测试中...';
+
+        // 获取cookie用于认证
+        const cookies = document.cookie;
+
+        // 创建EventSource（SSE）
+        const url = `${API_BASE}/nodes/${nodeId}/stream-test?protocol=${protocol}&count=${testCount}`;
+        const eventSource = new EventSource(url);
+        activeEventSources.push(eventSource);
+
+        eventSource.onmessage = function(event) {
+            // 检查会话是否还有效
+            if (currentTestSessionId !== testSessionId) {
+                eventSource.close();
+                return;
+            }
+
+            const data = JSON.parse(event.data);
+
+            // 检查是否完成
+            if (data.done) {
+                eventSource.close();
+                completedProtocols++;
+
+                // 所有协议都完成后恢复按钮并更新列表
+                if (completedProtocols === 3) {
+                    startBtn.disabled = false;
+                    startBtn.textContent = '开始检测';
+
+                    if (currentTestSessionId === testSessionId) {
+                        loadNodes();
+                        showToast('延迟检测完成', 'success');
+                    }
+                }
+                return;
+            }
+
+            // 更新进度
+            element.completed = data.index;
+            const progress = (data.index / data.total) * 100;
+            element.progress.style.width = `${progress}%`;
+
+            // 显示结果
+            const success = data.available && data.latency > 0;
+            const resultItem = document.createElement('span');
+            resultItem.className = `latency-result-item ${success ? 'latency-result-success' : 'latency-result-fail'}`;
+            resultItem.textContent = success ? `#${data.index}: ${data.latency}ms` : `#${data.index}: 失败`;
+            element.results.appendChild(resultItem);
+
+            // 记录延迟
+            if (success) {
+                element.latencies.push(data.latency);
+            }
+
+            // 如果是最后一次测试，显示汇总
+            if (data.index === data.total) {
+                if (element.latencies.length > 0) {
+                    const avgLatency = Math.round(element.latencies.reduce((a, b) => a + b, 0) / element.latencies.length);
+                    const successRate = Math.round((element.latencies.length / data.total) * 100);
+
+                    element.avg.textContent = avgLatency;
+                    element.success.textContent = successRate;
+                    element.summary.style.display = 'block';
+
+                    element.status.textContent = `完成 (平均 ${avgLatency}ms)`;
+                    element.status.style.color = '#22c55e';
+                } else {
+                    element.status.textContent = '全部失败';
+                    element.status.style.color = '#ef4444';
+                }
+            }
+        };
+
+        eventSource.onerror = function(error) {
+            console.error(`${protocol} SSE error:`, error);
+            eventSource.close();
+            completedProtocols++;
+
+            if (currentTestSessionId === testSessionId) {
+                element.status.textContent = '连接错误';
+                element.status.style.color = '#ef4444';
+            }
+
+            // 所有协议都完成（包括失败）后恢复按钮
+            if (completedProtocols === 3) {
+                startBtn.disabled = false;
+                startBtn.textContent = '开始检测';
+            }
+        };
+    });
+}
+
 // 编辑节点
 async function editNode(id) {
     try {
@@ -1265,14 +1684,8 @@ async function editNode(id) {
             // 填充公共字段：节点名称
             document.getElementById('node-name').value = node.name;
 
-            // 填充入站配置
-            document.getElementById('inbound-type').value = node.inbound_type || 'tun';
-            document.getElementById('inbound-listen').value = node.inbound_listen || '127.0.0.1';
-            if (node.inbound_port) {
-                document.getElementById('inbound-port').value = node.inbound_port;
-            }
+            // 填充DNS劫持配置
             document.getElementById('hijack-dns').checked = node.hijack_dns !== false; // 默认 true
-            updateInboundFields(); // 更新入站字段显示
 
             // 设置中转节点
             if (node.detour_id) {

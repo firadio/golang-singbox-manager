@@ -45,6 +45,7 @@ type LoggingConfig struct {
 // AuthConfig 认证配置
 type AuthConfig struct {
 	Enabled  bool   `yaml:"enabled"`
+	Username string `yaml:"username"` // 用户名，留空表示无需用户名
 	Password string `yaml:"password"`
 }
 

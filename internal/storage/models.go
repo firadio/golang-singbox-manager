@@ -12,15 +12,16 @@ type ProxyNode struct {
 	TunName       string    `json:"tun_name" db:"tun_name"`
 	TunAddress    string    `json:"tun_address" db:"tun_address"`
 	TableID       int       `json:"table_id" db:"table_id"`
-	InboundType   string    `json:"inbound_type" db:"inbound_type"`       // tun/http/socks5
+	InboundType   string    `json:"inbound_type" db:"inbound_type"`       // tun/http/socks5 (deprecated, use multiple inbounds)
 	InboundListen string    `json:"inbound_listen" db:"inbound_listen"`   // listen address for http/socks5
 	InboundPort   *int      `json:"inbound_port,omitempty" db:"inbound_port"` // listen port for http/socks5
 	HijackDNS     bool      `json:"hijack_dns" db:"hijack_dns"`           // enable DNS hijacking
-	Enabled       bool      `json:"enabled" db:"enabled"`
-	Status        string    `json:"status" db:"status"` // stopped/starting/running/error
-	Pid           int       `json:"pid,omitempty" db:"pid"`
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
+	// HTTP和SOCKS5端口根据ID自动计算：HTTP=8000+ID, SOCKS5=5000+ID
+	Enabled        bool   `json:"enabled" db:"enabled"`
+	Status         string `json:"status" db:"status"` // stopped/starting/running/error
+	Pid            int    `json:"pid,omitempty" db:"pid"`
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // RoutingRule 路由规则模型
@@ -38,13 +39,15 @@ type RoutingRule struct {
 
 // NodeStats 节点统计模型
 type NodeStats struct {
-	ID        int       `json:"id" db:"id"`
-	NodeID    int       `json:"node_id" db:"node_id"`
-	Latency   int       `json:"latency" db:"latency"`
-	TxBytes   int64     `json:"tx_bytes" db:"tx_bytes"`
-	RxBytes   int64     `json:"rx_bytes" db:"rx_bytes"`
-	LastCheck time.Time `json:"last_check" db:"last_check"`
-	Available bool      `json:"available" db:"available"`
+	ID            int       `json:"id" db:"id"`
+	NodeID        int       `json:"node_id" db:"node_id"`
+	Latency       int       `json:"latency" db:"latency"`               // TUN延迟
+	HTTPLatency   int       `json:"http_latency" db:"http_latency"`     // HTTP代理延迟
+	Socks5Latency int       `json:"socks5_latency" db:"socks5_latency"` // SOCKS5代理延迟
+	TxBytes       int64     `json:"tx_bytes" db:"tx_bytes"`
+	RxBytes       int64     `json:"rx_bytes" db:"rx_bytes"`
+	LastCheck     time.Time `json:"last_check" db:"last_check"`
+	Available     bool      `json:"available" db:"available"`
 }
 
 // OperationLog 操作日志模型

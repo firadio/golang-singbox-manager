@@ -2,11 +2,16 @@ package health
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"net/http"
+	"net/url"
 	"os/exec"
 	"time"
 
 	"github.com/firadio/golang-singbox-manager/internal/storage"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/proxy"
 )
 
 // Checker 健康检查器
@@ -69,26 +74,32 @@ func (c *Checker) checkAllNodes() {
 			continue
 		}
 
-		latency, available := c.checkNode(node)
+		// 检测三种入站
+		tunLatency, tunAvailable := c.checkNodeTUN(node)
+		httpLatency, _ := c.checkNodeHTTP(node)
+		socks5Latency, _ := c.checkNodeSOCKS5(node)
 
 		// 更新统计信息
 		stats := &storage.NodeStats{
-			NodeID:    node.ID,
-			Latency:   latency,
-			Available: available,
-			LastCheck: time.Now(),
+			NodeID:        node.ID,
+			Latency:       tunLatency,
+			HTTPLatency:   httpLatency,
+			Socks5Latency: socks5Latency,
+			Available:     tunAvailable,
+			LastCheck:     time.Now(),
 		}
 
 		if err := storage.SaveNodeStats(stats); err != nil {
 			log.Errorf("Failed to save node stats for node %d: %v", node.ID, err)
 		}
 
-		log.Debugf("Node %d (%s) - latency: %dms, available: %v", node.ID, node.Name, latency, available)
+		log.Debugf("Node %d (%s) - TUN: %dms, HTTP: %dms, SOCKS5: %dms, available: %v",
+			node.ID, node.Name, tunLatency, httpLatency, socks5Latency, tunAvailable)
 	}
 }
 
-// checkNode 检查单个节点
-func (c *Checker) checkNode(node *storage.ProxyNode) (int, bool) {
+// checkNodeTUN 通过TUN入站检查节点
+func (c *Checker) checkNodeTUN(node *storage.ProxyNode) (int, bool) {
 	// 使用 DNS 查询测试节点可用性
 	// 通过节点的路由表进行 DNS 查询，流量会经过代理节点
 	start := time.Now()
@@ -108,11 +119,96 @@ func (c *Checker) checkNode(node *storage.ProxyNode) (int, bool) {
 	err := cmd.Run()
 
 	if err != nil {
-		log.Debugf("Node %d (%s) DNS query failed: %v", node.ID, node.Name, err)
+		log.Debugf("Node %d (%s) TUN DNS query failed: %v", node.ID, node.Name, err)
 		return 0, false
 	}
 
 	latency := int(time.Since(start).Milliseconds())
 
 	return latency, true
+}
+
+// checkNodeHTTP 通过HTTP代理检查节点
+func (c *Checker) checkNodeHTTP(node *storage.ProxyNode) (int, bool) {
+	start := time.Now()
+
+	// HTTP代理端口 = 8000 + ID
+	httpPort := 8000 + node.ID
+	proxyURL, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", httpPort))
+	if err != nil {
+		log.Debugf("Node %d (%s) HTTP proxy URL parse failed: %v", node.ID, node.Name, err)
+		return 0, false
+	}
+
+	// 创建带超时的HTTP客户端
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	// 请求一个简单的网站
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://www.gstatic.com/generate_204", nil)
+	if err != nil {
+		return 0, false
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Debugf("Node %d (%s) HTTP proxy request failed: %v", node.ID, node.Name, err)
+		return 0, false
+	}
+	defer resp.Body.Close()
+
+	latency := int(time.Since(start).Milliseconds())
+	return latency, resp.StatusCode == 204
+}
+
+// checkNodeSOCKS5 通过SOCKS5代理检查节点
+func (c *Checker) checkNodeSOCKS5(node *storage.ProxyNode) (int, bool) {
+	start := time.Now()
+
+	// SOCKS5代理端口 = 5000 + ID
+	socks5Port := 5000 + node.ID
+	proxyAddr := fmt.Sprintf("127.0.0.1:%d", socks5Port)
+
+	// 创建SOCKS5拨号器
+	dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+	if err != nil {
+		log.Debugf("Node %d (%s) SOCKS5 dialer creation failed: %v", node.ID, node.Name, err)
+		return 0, false
+	}
+
+	// 创建带超时的HTTP客户端
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.Dial(network, addr)
+			},
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	// 请求一个简单的网站
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://www.gstatic.com/generate_204", nil)
+	if err != nil {
+		return 0, false
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Debugf("Node %d (%s) SOCKS5 proxy request failed: %v", node.ID, node.Name, err)
+		return 0, false
+	}
+	defer resp.Body.Close()
+
+	latency := int(time.Since(start).Milliseconds())
+	return latency, resp.StatusCode == 204
 }

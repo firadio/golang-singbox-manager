@@ -10,7 +10,8 @@ import (
 func CreateNode(node *ProxyNode) error {
 	query := `INSERT INTO proxy_nodes
 		(name, type, config, detour_id, tun_name, tun_address, table_id,
-		 inbound_type, inbound_listen, inbound_port, hijack_dns, enabled, status)
+		 inbound_type, inbound_listen, inbound_port, hijack_dns,
+		 enabled, status)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := db.Exec(query,

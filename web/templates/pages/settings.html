@@ -18,6 +18,11 @@
         </div>
     </div>
     <div class="form-group">
+        <label>登录用户名</label>
+        <input type="text" id="settings-auth-username" placeholder="留空表示无需用户名">
+        <small>留空则只需要输入密码即可登录</small>
+    </div>
+    <div class="form-group">
         <label>登录密码</label>
         <input type="password" id="settings-auth-password" placeholder="留空表示不修改">
         <small>设置后需要密码才能访问管理界面</small>
@@ -113,6 +118,7 @@ async function loadSettings() {
             const settings = data.data;
             document.getElementById('settings-web-port').value = settings.web_port || 80;
             document.getElementById('settings-auth-enabled').checked = settings.auth_enabled || false;
+            document.getElementById('settings-auth-username').value = settings.auth_username || '';
             document.getElementById('settings-health-enabled').checked = settings.health_check_enabled || false;
             document.getElementById('settings-health-interval').value = settings.health_check_interval || 30;
             document.getElementById('settings-mikrotik-enabled').checked = settings.mikrotik_enabled || false;
@@ -132,6 +138,7 @@ async function saveSettings() {
     const webPort = parseInt(document.getElementById('settings-web-port').value);
     const currentPort = parseInt(window.location.port) || 80;
     const authEnabled = document.getElementById('settings-auth-enabled').checked;
+    const authUsername = document.getElementById('settings-auth-username').value;
     const authPassword = document.getElementById('settings-auth-password').value;
     const healthEnabled = document.getElementById('settings-health-enabled').checked;
     const healthInterval = parseInt(document.getElementById('settings-health-interval').value);
@@ -145,6 +152,7 @@ async function saveSettings() {
     const requestBody = {
         web_port: webPort,
         auth_enabled: authEnabled,
+        auth_username: authUsername,
         health_check_enabled: healthEnabled,
         health_check_interval: healthInterval,
         mikrotik_enabled: mikrotikEnabled,
@@ -200,6 +208,10 @@ async function saveSettings() {
                 }
             } else {
                 showToast('设置保存成功', 'success');
+                // 刷新导航栏的认证状态和用户名显示
+                if (typeof loadAuthStatus === 'function') {
+                    loadAuthStatus();
+                }
             }
         } else {
             showToast('保存失败: ' + data.message, 'error');

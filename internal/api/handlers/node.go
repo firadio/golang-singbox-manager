@@ -1,15 +1,23 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
 	"strconv"
+	"time"
 
 	"github.com/firadio/golang-singbox-manager/internal/network"
 	"github.com/firadio/golang-singbox-manager/internal/singbox"
 	"github.com/firadio/golang-singbox-manager/internal/storage"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/proxy"
 )
 
 // NodeHandler 节点处理器
@@ -47,8 +55,10 @@ func (h *NodeHandler) GetAllNodes(c *gin.Context) {
 	// 构建包含统计信息的节点数据
 	type NodeWithStats struct {
 		*storage.ProxyNode
-		Latency   int  `json:"latency"`
-		Available bool `json:"available"`
+		Latency       int  `json:"latency"`         // TUN延迟
+		HTTPLatency   int  `json:"http_latency"`    // HTTP代理延迟
+		Socks5Latency int  `json:"socks5_latency"`  // SOCKS5代理延迟
+		Available     bool `json:"available"`
 	}
 
 	nodesWithStats := make([]NodeWithStats, len(nodes))
@@ -56,15 +66,19 @@ func (h *NodeHandler) GetAllNodes(c *gin.Context) {
 		stats, ok := statsMap[node.ID]
 		if ok {
 			nodesWithStats[i] = NodeWithStats{
-				ProxyNode: node,
-				Latency:   stats.Latency,
-				Available: stats.Available,
+				ProxyNode:     node,
+				Latency:       stats.Latency,
+				HTTPLatency:   stats.HTTPLatency,
+				Socks5Latency: stats.Socks5Latency,
+				Available:     stats.Available,
 			}
 		} else {
 			nodesWithStats[i] = NodeWithStats{
-				ProxyNode: node,
-				Latency:   0,
-				Available: false,
+				ProxyNode:     node,
+				Latency:       0,
+				HTTPLatency:   0,
+				Socks5Latency: 0,
+				Available:     false,
 			}
 		}
 	}
@@ -114,7 +128,6 @@ func (h *NodeHandler) CreateNode(c *gin.Context) {
 	if node.InboundListen == "" {
 		node.InboundListen = "127.0.0.1"
 	}
-	// hijack_dns 默认已在数据库设置为 true
 
 	// 创建节点
 	if err := storage.CreateNode(&node); err != nil {
@@ -123,7 +136,7 @@ func (h *NodeHandler) CreateNode(c *gin.Context) {
 		return
 	}
 
-	// 自动分配 TunName 和 TunAddress (即使是 HTTP/SOCKS5，也保留以兼容数据库约束)
+	// 自动分配 TunName 和 TunAddress
 	node.TunName = storage.GetTunNameByID(node.ID)
 	node.TunAddress = storage.GetTunAddressByID(node.ID)
 	node.Status = "stopped"
@@ -167,6 +180,8 @@ func (h *NodeHandler) UpdateNode(c *gin.Context) {
 	existingNode.InboundListen = updateData.InboundListen
 	existingNode.InboundPort = updateData.InboundPort
 	existingNode.HijackDNS = updateData.HijackDNS
+	// HTTP和SOCKS5端口（保留原有设置，不允许修改）
+	// existingNode.HTTPPort 和 existingNode.Socks5Port 不修改
 	if updateData.DetourID != nil {
 		existingNode.DetourID = updateData.DetourID
 	}
@@ -337,4 +352,279 @@ func (h *NodeHandler) GetNodeConfigFile(c *gin.Context) {
 		"path":    configPath,
 		"content": string(content),
 	})
+}
+
+// CheckNodeLatency 手动检测节点延迟
+func (h *NodeHandler) CheckNodeLatency(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		Error(c, 1002, "Invalid node ID")
+		return
+	}
+
+	node, err := storage.GetNode(id)
+	if err != nil {
+		log.Errorf("Failed to get node: %v", err)
+		Error(c, 1003, "Node not found")
+		return
+	}
+
+	// 只检测运行中的节点
+	if node.Status != "running" {
+		Error(c, 1015, "Node is not running")
+		return
+	}
+
+	// 检测三种入站
+	tunLatency, tunAvailable := checkNodeTUN(node)
+	httpLatency, httpAvailable := checkNodeHTTP(node)
+	socks5Latency, socks5Available := checkNodeSOCKS5(node)
+
+	// 更新统计信息
+	stats := &storage.NodeStats{
+		NodeID:        node.ID,
+		Latency:       tunLatency,
+		HTTPLatency:   httpLatency,
+		Socks5Latency: socks5Latency,
+		Available:     tunAvailable,
+		LastCheck:     time.Now(),
+	}
+
+	if err := storage.SaveNodeStats(stats); err != nil {
+		log.Errorf("Failed to save node stats: %v", err)
+	}
+
+	Success(c, gin.H{
+		"node_id":          node.ID,
+		"tun_latency":      tunLatency,
+		"tun_available":    tunAvailable,
+		"http_latency":     httpLatency,
+		"http_available":   httpAvailable,
+		"socks5_latency":   socks5Latency,
+		"socks5_available": socks5Available,
+		"last_check":       stats.LastCheck,
+	})
+}
+
+// StreamLatencyTest 流式延迟测试（支持指定协议和测试次数）
+func (h *NodeHandler) StreamLatencyTest(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		Error(c, 1002, "Invalid node ID")
+		return
+	}
+
+	// 获取查询参数
+	protocol := c.Query("protocol") // tun, http, socks5
+	countStr := c.DefaultQuery("count", "5")
+	count, err := strconv.Atoi(countStr)
+	if err != nil || count < 1 || count > 20 {
+		Error(c, 1002, "Invalid count parameter (1-20)")
+		return
+	}
+
+	node, err := storage.GetNode(id)
+	if err != nil {
+		log.Errorf("Failed to get node: %v", err)
+		Error(c, 1003, "Node not found")
+		return
+	}
+
+	// 只检测运行中的节点
+	if node.Status != "running" {
+		Error(c, 1015, "Node is not running")
+		return
+	}
+
+	// 设置SSE响应头
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	// 创建flusher
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		Error(c, 1016, "Streaming not supported")
+		return
+	}
+
+	// 根据协议选择测试函数
+	var testFunc func(*storage.ProxyNode) (int, bool)
+	switch protocol {
+	case "tun":
+		testFunc = checkNodeTUN
+	case "http":
+		testFunc = checkNodeHTTP
+	case "socks5":
+		testFunc = checkNodeSOCKS5
+	default:
+		Error(c, 1002, "Invalid protocol (tun/http/socks5)")
+		return
+	}
+
+	// 执行测试并流式返回结果
+	for i := 1; i <= count; i++ {
+		latency, available := testFunc(node)
+
+		// 发送SSE数据
+		data := gin.H{
+			"index":     i,
+			"total":     count,
+			"latency":   latency,
+			"available": available,
+			"protocol":  protocol,
+		}
+
+		jsonData, _ := json.Marshal(data)
+		fmt.Fprintf(c.Writer, "data: %s\n\n", jsonData)
+		flusher.Flush()
+
+		// 如果不是最后一次测试，等待一小段时间
+		if i < count {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	// 发送完成信号
+	fmt.Fprintf(c.Writer, "data: {\"done\": true}\n\n")
+	flusher.Flush()
+
+	// 更新统计信息（使用最后一次测试结果）
+	finalLatency, finalAvailable := testFunc(node)
+	stats, _ := storage.GetNodeStats(node.ID)
+	if stats == nil {
+		stats = &storage.NodeStats{NodeID: node.ID}
+	}
+
+	switch protocol {
+	case "tun":
+		stats.Latency = finalLatency
+		stats.Available = finalAvailable
+	case "http":
+		stats.HTTPLatency = finalLatency
+	case "socks5":
+		stats.Socks5Latency = finalLatency
+	}
+	stats.LastCheck = time.Now()
+
+	storage.SaveNodeStats(stats)
+}
+
+// checkNodeTUN 通过TUN入站检查节点 (使用 curl --interface tun1)
+func checkNodeTUN(node *storage.ProxyNode) (int, bool) {
+	start := time.Now()
+
+	// 使用 curl 命令通过 --interface 绑定到 TUN 设备（类似 curl --interface tun1 http://1.1.1.1）
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "curl",
+		"--interface", node.TunName, // 绑定到 TUN 设备
+		"-m", "5", // 5秒超时
+		"-s", // 静默模式
+		"-o", "/dev/null", // 不输出内容
+		"-w", "%{http_code}", // 只输出HTTP状态码
+		"http://1.1.1.1") // 测试目标
+
+	output, err := cmd.Output()
+	if err != nil {
+		log.Debugf("Node %d (%s) TUN test failed: %v", node.ID, node.Name, err)
+		return 0, false
+	}
+
+	// 检查HTTP状态码（200表示成功）
+	statusCode := string(output)
+	if statusCode != "200" && statusCode != "301" && statusCode != "302" {
+		log.Debugf("Node %d (%s) TUN test got HTTP %s", node.ID, node.Name, statusCode)
+		return 0, false
+	}
+
+	latency := int(time.Since(start).Milliseconds())
+	return latency, true
+}
+
+// checkNodeHTTP 通过HTTP代理检查节点
+func checkNodeHTTP(node *storage.ProxyNode) (int, bool) {
+	start := time.Now()
+
+	// HTTP代理端口 = 8000 + ID
+	httpPort := 8000 + node.ID
+	proxyURL, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", httpPort))
+	if err != nil {
+		log.Debugf("Node %d (%s) HTTP proxy URL parse failed: %v", node.ID, node.Name, err)
+		return 0, false
+	}
+
+	// 创建带超时的HTTP客户端
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	// 请求一个简单的网站
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://www.gstatic.com/generate_204", nil)
+	if err != nil {
+		return 0, false
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Debugf("Node %d (%s) HTTP proxy request failed: %v", node.ID, node.Name, err)
+		return 0, false
+	}
+	defer resp.Body.Close()
+
+	latency := int(time.Since(start).Milliseconds())
+	return latency, resp.StatusCode == 204
+}
+
+// checkNodeSOCKS5 通过SOCKS5代理检查节点
+func checkNodeSOCKS5(node *storage.ProxyNode) (int, bool) {
+	start := time.Now()
+
+	// SOCKS5代理端口 = 5000 + ID
+	socks5Port := 5000 + node.ID
+	proxyAddr := fmt.Sprintf("127.0.0.1:%d", socks5Port)
+
+	// 创建SOCKS5拨号器
+	dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+	if err != nil {
+		log.Debugf("Node %d (%s) SOCKS5 dialer creation failed: %v", node.ID, node.Name, err)
+		return 0, false
+	}
+
+	// 创建带超时的HTTP客户端
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.Dial(network, addr)
+			},
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	// 请求一个简单的网站
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://www.gstatic.com/generate_204", nil)
+	if err != nil {
+		return 0, false
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Debugf("Node %d (%s) SOCKS5 proxy request failed: %v", node.ID, node.Name, err)
+		return 0, false
+	}
+	defer resp.Body.Close()
+
+	latency := int(time.Since(start).Milliseconds())
+	return latency, resp.StatusCode == 204
 }

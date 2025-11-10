@@ -11,9 +11,9 @@
         <div class="login-box">
             <h1>Sing-Box Manager</h1>
             <form id="loginForm" onsubmit="handleLogin(event)">
-                <div class="form-group">
+                <div class="form-group" id="usernameGroup">
                     <label for="username">用户名</label>
-                    <input type="text" id="username" required autofocus>
+                    <input type="text" id="username" autofocus>
                 </div>
                 <div class="form-group">
                     <label for="password">密码</label>
@@ -26,11 +26,52 @@
 
     <script src="/static/js/common.js"></script>
     <script>
+        console.log('Login page loaded - checking username requirement...');
+        let usernameRequired = true;
+
+        // 检查是否需要用户名
+        async function checkUsernameRequired() {
+            try {
+                const response = await fetch('/api/auth/config');
+                const data = await response.json();
+                console.log('Auth config received:', data);
+
+                if (data.code === 0 && data.data) {
+                    // 如果没有设置用户名，隐藏用户名字段
+                    usernameRequired = data.data.username_required || false;
+                    console.log('Username required:', usernameRequired);
+
+                    const usernameGroup = document.getElementById('usernameGroup');
+                    const usernameInput = document.getElementById('username');
+                    const passwordInput = document.getElementById('password');
+
+                    if (!usernameRequired) {
+                        console.log('Hiding username field');
+                        usernameGroup.style.display = 'none';
+                        usernameInput.removeAttribute('required');
+                        passwordInput.focus(); // 将焦点移到密码框
+                    } else {
+                        console.log('Showing username field');
+                        usernameGroup.style.display = 'block';
+                        usernameInput.setAttribute('required', 'required');
+                        usernameInput.focus(); // 将焦点移到用户名框
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check username requirement:', error);
+            }
+        }
+
         async function handleLogin(event) {
             event.preventDefault();
 
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
+
+            const loginData = { password };
+            if (usernameRequired) {
+                loginData.username = username;
+            }
 
             try {
                 const response = await fetch('/api/auth/login', {
@@ -38,7 +79,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify(loginData)
                 });
 
                 const data = await response.json();
@@ -57,10 +98,35 @@
             }
         }
 
-        // 如果已登录，直接跳转
-        if (isAuthenticated()) {
-            window.location.href = '/static/nodes.html';
+        // 初始化登录页面
+        async function initLoginPage() {
+            // 先检查认证功能是否开启
+            try {
+                const response = await fetch('/api/auth/config');
+                const data = await response.json();
+
+                if (data.code === 0 && data.data) {
+                    // 如果认证功能未开启，直接跳转到首页
+                    if (!data.data.auth_enabled) {
+                        window.location.href = '/nodes';
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check auth config:', error);
+            }
+
+            // 如果已登录，直接跳转
+            if (isAuthenticated()) {
+                window.location.href = '/static/nodes.html';
+            } else {
+                // 检查是否需要用户名
+                checkUsernameRequired();
+            }
         }
+
+        // 初始化
+        initLoginPage();
     </script>
 </body>
 </html>

@@ -18,9 +18,9 @@
                 <li><a href="/port-mappings" {{if eq .CurrentPage "port-mappings"}}class="active"{{end}}>端口映射</a></li>
                 <li><a href="/settings" {{if eq .CurrentPage "settings"}}class="active"{{end}}>系统设置</a></li>
             </ul>
-            <div class="nav-user">
-                <span class="username">管理员</span>
-                <button class="logout-btn" onclick="logout()">退出</button>
+            <div class="nav-user" id="nav-user">
+                <span class="username" id="nav-username">管理员</span>
+                <button class="logout-btn" id="logout-btn" onclick="logout()">退出</button>
             </div>
         </div>
     </nav>
@@ -53,6 +53,53 @@
 
     <!-- 公共脚本 -->
     <script src="/static/js/common.js"></script>
+    <script>
+        // 加载并显示用户名和认证状态
+        async function loadAuthStatus() {
+            try {
+                // 先获取认证配置
+                const authConfigRes = await fetch(`${API_BASE}/auth/config`);
+                const authConfigData = await authConfigRes.json();
+
+                const navUser = document.getElementById('nav-user');
+                const usernameEl = document.getElementById('nav-username');
+                const logoutBtn = document.getElementById('logout-btn');
+
+                // 如果认证功能未开启，隐藏整个用户区域
+                if (authConfigData.code === 0 && authConfigData.data && !authConfigData.data.auth_enabled) {
+                    navUser.style.display = 'none';
+                    return;
+                }
+
+                // 认证功能已开启，获取用户名
+                const res = await authFetch(`${API_BASE}/settings`);
+                const data = await res.json();
+
+                if (data.code === 0 && data.data) {
+                    const authUsername = data.data.auth_username;
+
+                    // 如果设置了用户名，显示用户名；否则隐藏
+                    if (authUsername && authUsername.trim() !== '') {
+                        usernameEl.textContent = authUsername;
+                        usernameEl.style.display = 'inline';
+                    } else {
+                        usernameEl.style.display = 'none';
+                    }
+
+                    // 显示退出按钮
+                    logoutBtn.style.display = 'inline-block';
+                    navUser.style.display = 'flex';
+                }
+            } catch (error) {
+                console.error('Failed to load auth status:', error);
+            }
+        }
+
+        // 页面加载时获取认证状态
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAuthStatus();
+        });
+    </script>
 </body>
 </html>
 {{end}}

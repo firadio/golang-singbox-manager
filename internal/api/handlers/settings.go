@@ -33,6 +33,7 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 	settings := gin.H{
 		"web_port":               h.config.Server.Port,
 		"auth_enabled":           h.config.Auth.Enabled,
+		"auth_username":          h.config.Auth.Username,
 		"auth_password_set":      h.config.Auth.Password != "",
 		"mikrotik_enabled":       h.config.Mikrotik.Enabled,
 		"mikrotik_address":       h.config.Mikrotik.Address,
@@ -48,6 +49,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	var updateData struct {
 		WebPort               int    `json:"web_port"`
 		AuthEnabled           bool   `json:"auth_enabled"`
+		AuthUsername          string `json:"auth_username"`
 		AuthPassword          string `json:"auth_password"`
 		MikrotikEnabled       bool   `json:"mikrotik_enabled"`
 		MikrotikAddress       string `json:"mikrotik_address"`
@@ -68,6 +70,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	// 更新配置
 	h.config.Server.Port = updateData.WebPort
 	h.config.Auth.Enabled = updateData.AuthEnabled
+	h.config.Auth.Username = updateData.AuthUsername
 	if updateData.AuthPassword != "" {
 		h.config.Auth.Password = updateData.AuthPassword
 	}
@@ -161,6 +164,15 @@ func (h *SettingsHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// 如果配置了用户名，需要验证用户名
+	if h.config.Auth.Username != "" {
+		if loginData.Username != h.config.Auth.Username {
+			Error(c, 4004, "Invalid username")
+			return
+		}
+	}
+
+	// 验证密码
 	if loginData.Password != h.config.Auth.Password {
 		Error(c, 4003, "Invalid password")
 		return
@@ -217,4 +229,14 @@ func (h *SettingsHandler) ShutdownService(c *gin.Context) {
 		log.Info("Shutting down service...")
 		os.Exit(0)
 	}()
+}
+
+// GetAuthConfig 获取认证配置（公开接口，用于登录页面）
+func (h *SettingsHandler) GetAuthConfig(c *gin.Context) {
+	authConfig := gin.H{
+		"auth_enabled":       h.config.Auth.Enabled,
+		"username_required":  h.config.Auth.Username != "",
+		"auth_username":      h.config.Auth.Username,
+	}
+	Success(c, authConfig)
 }

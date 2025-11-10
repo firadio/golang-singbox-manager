@@ -152,11 +152,29 @@ function formatSize(bytes) {
 }
 
 // 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // 检查认证状态（登录页面除外）
-    if (window.location.pathname !== '/login' && !isAuthenticated()) {
-        window.location.href = '/login';
-        return;
+    if (window.location.pathname !== '/login') {
+        // 先检查认证功能是否开启
+        try {
+            const response = await fetch('/api/auth/config');
+            const data = await response.json();
+
+            if (data.code === 0 && data.data) {
+                // 如果认证功能开启，检查是否已登录
+                if (data.data.auth_enabled && !isAuthenticated()) {
+                    window.location.href = '/login';
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to check auth config:', error);
+            // 如果无法获取配置，回退到原有逻辑
+            if (!isAuthenticated()) {
+                window.location.href = '/login';
+                return;
+            }
+        }
     }
 
     // 高亮当前导航

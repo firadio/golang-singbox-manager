@@ -128,36 +128,33 @@ func GenerateConfig(node *storage.ProxyNode, detourNode *storage.ProxyNode) (str
 		routeRules = append(routeRules, RouteRule{Protocol: "dns", Action: "hijack-dns"})
 	}
 
-	// 构建入站配置
+	// 构建入站配置（TUN + HTTP + SOCKS5 同时启用）
 	var inbounds []Inbound
-	switch node.InboundType {
-	case "http":
-		inbounds = []Inbound{
-			{
-				Type:       "http",
-				Listen:     node.InboundListen,
-				ListenPort: *node.InboundPort,
-				Tag:        "http-in",
-			},
-		}
-	case "socks5":
-		inbounds = []Inbound{
-			{
-				Type:       "socks",
-				Listen:     node.InboundListen,
-				ListenPort: *node.InboundPort,
-				Tag:        "socks-in",
-			},
-		}
-	default: // tun
-		inbounds = []Inbound{
-			{
-				Type:          "tun",
-				InterfaceName: node.TunName,
-				Address:       []string{node.TunAddress},
-			},
-		}
-	}
+
+	// TUN 入站（始终启用）
+	inbounds = append(inbounds, Inbound{
+		Type:          "tun",
+		InterfaceName: node.TunName,
+		Address:       []string{node.TunAddress},
+	})
+
+	// HTTP 入站（根据ID自动计算端口：8000 + ID）
+	httpPort := 8000 + node.ID
+	inbounds = append(inbounds, Inbound{
+		Type:       "http",
+		Listen:     "::",
+		ListenPort: httpPort,
+		Tag:        "http-in",
+	})
+
+	// SOCKS5 入站（根据ID自动计算端口：5000 + ID）
+	socks5Port := 5000 + node.ID
+	inbounds = append(inbounds, Inbound{
+		Type:       "socks",
+		Listen:     "::",
+		ListenPort: socks5Port,
+		Tag:        "socks-in",
+	})
 
 	// 构建完整配置
 	config := &SingBoxConfig{

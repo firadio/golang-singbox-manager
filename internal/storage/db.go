@@ -98,6 +98,8 @@ func migrate() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			node_id INTEGER NOT NULL,
 			latency INTEGER DEFAULT 0,
+			http_latency INTEGER DEFAULT 0,
+			socks5_latency INTEGER DEFAULT 0,
 			tx_bytes INTEGER DEFAULT 0,
 			rx_bytes INTEGER DEFAULT 0,
 			last_check DATETIME,
@@ -149,6 +151,11 @@ func migrate() error {
 		return fmt.Errorf("failed to add new columns: %w", err)
 	}
 
+	// 添加统计表的新列
+	if err := addStatsColumnsIfNotExist(); err != nil {
+		return fmt.Errorf("failed to add stats columns: %w", err)
+	}
+
 	return nil
 }
 
@@ -193,6 +200,49 @@ func addColumnsIfNotExist() error {
 				return fmt.Errorf("failed to add column %s: %w", col.name, err)
 			}
 			log.Infof("Added column %s to proxy_nodes table", col.name)
+		}
+	}
+
+	return nil
+}
+
+// addStatsColumnsIfNotExist 添加统计表新列（如果不存在）
+func addStatsColumnsIfNotExist() error {
+	columns := []struct {
+		name       string
+		definition string
+	}{
+		{"http_latency", "INTEGER DEFAULT 0"},
+		{"socks5_latency", "INTEGER DEFAULT 0"},
+	}
+
+	// 获取现有列
+	rows, err := db.Query("PRAGMA table_info(node_stats)")
+	if err != nil {
+		return fmt.Errorf("failed to get table info: %w", err)
+	}
+	defer rows.Close()
+
+	existingColumns := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dfltValue sql.NullString
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			return fmt.Errorf("failed to scan column info: %w", err)
+		}
+		existingColumns[name] = true
+	}
+
+	// 添加不存在的列
+	for _, col := range columns {
+		if !existingColumns[col.name] {
+			alterSQL := fmt.Sprintf("ALTER TABLE node_stats ADD COLUMN %s %s", col.name, col.definition)
+			if _, err := db.Exec(alterSQL); err != nil {
+				return fmt.Errorf("failed to add column %s: %w", col.name, err)
+			}
+			log.Infof("Added column %s to node_stats table", col.name)
 		}
 	}
 

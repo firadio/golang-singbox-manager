@@ -79,6 +79,9 @@ func (s *Server) setupRoutes() {
 		// 登录
 		public.POST("/auth/login", s.settingsHandler.Login)
 
+		// 获取认证配置（用于登录页面）
+		public.GET("/auth/config", s.settingsHandler.GetAuthConfig)
+
 		// 健康检查
 		public.GET("/health", func(c *gin.Context) {
 			c.JSON(200, gin.H{"status": "ok"})
@@ -102,6 +105,8 @@ func (s *Server) setupRoutes() {
 		nodes.POST("/:id/start", s.nodeHandler.StartNode)
 		nodes.POST("/:id/stop", s.nodeHandler.StopNode)
 		nodes.POST("/:id/restart", s.nodeHandler.RestartNode)
+		nodes.POST("/:id/check", s.nodeHandler.CheckNodeLatency)
+		nodes.GET("/:id/stream-test", s.nodeHandler.StreamLatencyTest) // 流式延迟测试
 		nodes.GET("/:id", s.nodeHandler.GetNode)
 		nodes.PUT("/:id", s.nodeHandler.UpdateNode)
 		nodes.DELETE("/:id", s.nodeHandler.DeleteNode)
