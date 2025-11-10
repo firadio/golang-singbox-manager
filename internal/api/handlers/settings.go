@@ -175,7 +175,7 @@ func (h *SettingsHandler) Login(c *gin.Context) {
 		"/",                    // path
 		"",                     // domain
 		false,                  // secure
-		true,                   // httpOnly
+		false,                  // httpOnly - 设置为false以允许JavaScript读取
 	)
 
 	Success(c, gin.H{
