@@ -724,44 +724,41 @@ table code {
     cursor: pointer;
 }
 
-/* 查看按钮下拉菜单 */
-.view-dropdown-menu {
-    position: fixed;
-    background: white;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    min-width: 160px;
-    z-index: 1001;
-    overflow: hidden;
-    animation: fadeIn 0.15s ease-out;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.view-menu-item {
-    padding: 12px 16px;
-    cursor: pointer;
-    transition: background 0.2s;
+/* 查看器 Tab 切换 */
+.viewer-tabs {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    gap: 5px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.viewer-tab {
+    padding: 12px 24px;
+    border: none;
+    background: none;
+    cursor: pointer;
     font-size: 14px;
+    color: #6b7280;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+
+.viewer-tab:hover {
     color: #374151;
+    background: #f9fafb;
 }
 
-.view-menu-item:hover {
-    background: #f3f4f6;
+.viewer-tab.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+    font-weight: 600;
 }
 
-.view-menu-item span {
-    font-size: 16px;
+.viewer-tab-content {
+    display: none;
+}
+
+.viewer-tab-content.active {
+    display: block;
 }

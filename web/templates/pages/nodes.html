@@ -300,29 +300,66 @@
     </div>
 </div>
 
-<!-- 配置查看器模态框 -->
-<div id="configViewerModal" class="modal">
+<!-- 节点查看模态框（配置+日志） -->
+<div id="nodeViewerModal" class="modal">
     <div class="modal-content" style="max-width: 900px;">
         <div class="modal-header">
-            <h3 id="config-modal-title">节点配置</h3>
-            <button class="modal-close" onclick="closeModal('configViewerModal')">&times;</button>
+            <h3 id="viewer-modal-title">节点查看</h3>
+            <button class="modal-close" onclick="closeModal('nodeViewerModal')">&times;</button>
         </div>
 
         <div class="modal-body">
-            <div class="form-group">
-                <label>配置文件路径</label>
-                <input type="text" id="config-file-path" readonly style="background: #f3f4f6;">
+            <!-- Tab 切换 -->
+            <div class="viewer-tabs">
+                <button class="viewer-tab active" onclick="switchViewerTab('config')">配置</button>
+                <button class="viewer-tab" onclick="switchViewerTab('logs')">日志</button>
             </div>
 
-            <div class="form-group">
-                <label>完整配置 (JSON)</label>
-                <textarea id="config-content" readonly style="min-height: 500px; font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 15px;"></textarea>
+            <!-- 配置 Tab -->
+            <div id="viewer-config-tab" class="viewer-tab-content active">
+                <div class="form-group">
+                    <label>配置文件路径</label>
+                    <input type="text" id="config-file-path" readonly style="background: #f3f4f6;">
+                </div>
+
+                <div class="form-group">
+                    <label>完整配置 (JSON)</label>
+                    <textarea id="config-content" readonly style="min-height: 500px; font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 15px;"></textarea>
+                </div>
+            </div>
+
+            <!-- 日志 Tab -->
+            <div id="viewer-logs-tab" class="viewer-tab-content">
+                <div class="log-controls">
+                    <input type="text" id="viewer-log-search" placeholder="搜索日志...">
+                    <select id="viewer-log-level">
+                        <option value="">全部级别</option>
+                        <option value="error">Error</option>
+                        <option value="warn">Warn</option>
+                        <option value="info">Info</option>
+                        <option value="debug">Debug</option>
+                    </select>
+                    <button class="btn btn-sm" onclick="refreshViewerLogs()">刷新</button>
+                    <button class="btn btn-sm btn-warning" onclick="clearViewerLogs()">清空日志</button>
+                </div>
+
+                <div class="log-info">
+                    <span id="viewer-log-count">加载中...</span>
+                    <span id="viewer-last-update"></span>
+                </div>
+
+                <div id="viewer-log-content" class="log-viewer">
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        <div>加载日志中...</div>
+                    </div>
+                </div>
             </div>
         </div>
 
         <div class="modal-footer">
-            <button class="btn btn-success" onclick="downloadNodeConfig()">下载配置</button>
-            <button class="btn" onclick="closeModal('configViewerModal')">关闭</button>
+            <button class="btn btn-success" onclick="downloadViewerContent()">下载</button>
+            <button class="btn" onclick="closeModal('nodeViewerModal')">关闭</button>
         </div>
     </div>
 </div>
@@ -960,7 +997,7 @@ async function loadNodes() {
                             : `<button class="btn btn-sm btn-success" onclick="startNode(${node.id})">启动</button>`
                         }
                         <button class="btn btn-sm" onclick="restartNode(${node.id})">重启</button>
-                        <button class="btn btn-sm" onclick="showViewMenu(${node.id}, '${node.name}', event)">查看</button>
+                        <button class="btn btn-sm" onclick="viewNode(${node.id}, '${node.name}')">查看</button>
                         <button class="btn btn-sm" onclick="editNode(${node.id})">编辑</button>
                         <button class="btn btn-sm btn-danger" onclick="deleteNode(${node.id}, '${node.name}')">删除</button>
                     </div>
@@ -1193,71 +1230,63 @@ async function editNode(id) {
     }
 }
 
-// ===== 配置查看功能 =====
+// ===== 节点查看功能（配置+日志） =====
 
-// 显示查看菜单
-function showViewMenu(nodeId, nodeName, event) {
-    event.stopPropagation();
+let currentViewNodeId = null;
+let currentViewNodeName = null;
+let currentViewerTab = 'config';
 
-    // 移除已存在的菜单
-    const existingMenu = document.querySelector('.view-dropdown-menu');
-    if (existingMenu) {
-        existingMenu.remove();
-    }
+// 查看节点（打开模态框，默认显示配置）
+async function viewNode(nodeId, nodeName) {
+    currentViewNodeId = nodeId;
+    currentViewNodeName = nodeName;
+    currentViewerTab = 'config';
 
-    // 创建下拉菜单
-    const menu = document.createElement('div');
-    menu.className = 'view-dropdown-menu';
-    menu.innerHTML = `
-        <div class="view-menu-item" onclick="viewNodeLogs(${nodeId}, '${nodeName}'); closeViewMenu()">
-            <span>📋</span> 查看日志
-        </div>
-        <div class="view-menu-item" onclick="viewNodeConfig(${nodeId}, '${nodeName}'); closeViewMenu()">
-            <span>⚙️</span> 查看配置
-        </div>
-    `;
+    document.getElementById('viewer-modal-title').textContent = `节点查看 - ${nodeName}`;
 
-    // 定位菜单
-    const button = event.target;
-    const rect = button.getBoundingClientRect();
-    menu.style.position = 'fixed';
-    menu.style.top = (rect.bottom + 5) + 'px';
-    menu.style.left = rect.left + 'px';
+    // 加载配置
+    await loadNodeConfig(nodeId);
 
-    document.body.appendChild(menu);
+    // 切换到配置 tab
+    switchViewerTab('config');
 
-    // 点击其他地方关闭菜单
-    setTimeout(() => {
-        document.addEventListener('click', closeViewMenu, { once: true });
-    }, 0);
+    openModal('nodeViewerModal');
 }
 
-// 关闭查看菜单
-function closeViewMenu() {
-    const menu = document.querySelector('.view-dropdown-menu');
-    if (menu) {
-        menu.remove();
+// 切换 Tab
+function switchViewerTab(tab) {
+    currentViewerTab = tab;
+
+    // 更新 tab 按钮状态
+    const tabs = document.querySelectorAll('.viewer-tab');
+    tabs.forEach((t, idx) => {
+        if ((tab === 'config' && idx === 0) || (tab === 'logs' && idx === 1)) {
+            t.classList.add('active');
+        } else {
+            t.classList.remove('active');
+        }
+    });
+
+    // 显示对应的内容
+    document.getElementById('viewer-config-tab').classList.toggle('active', tab === 'config');
+    document.getElementById('viewer-logs-tab').classList.toggle('active', tab === 'logs');
+
+    // 如果切换到日志，加载日志
+    if (tab === 'logs' && currentViewNodeId) {
+        loadViewerLogs();
     }
 }
 
-// 查看节点完整配置
-async function viewNodeConfig(nodeId, nodeName) {
+// 加载节点配置
+async function loadNodeConfig(nodeId) {
     try {
-        // 获取真实的配置文件内容
         const res = await authFetch(`${API_BASE}/nodes/${nodeId}/config-file`);
         const data = await res.json();
 
         if (data.code === 0 && data.data) {
-            // 显示配置文件路径
             document.getElementById('config-file-path').value = data.data.path;
-
-            // 显示真实的配置文件内容
-            // 格式化 JSON 以便阅读
             const configContent = JSON.parse(data.data.content);
             document.getElementById('config-content').value = JSON.stringify(configContent, null, 2);
-            document.getElementById('config-modal-title').textContent = `节点配置 - ${nodeName}`;
-
-            openModal('configViewerModal');
         } else {
             showToast('获取节点配置失败: ' + (data.message || '未知错误'), 'error');
         }
@@ -1267,23 +1296,114 @@ async function viewNodeConfig(nodeId, nodeName) {
     }
 }
 
-// 下载节点配置
-function downloadNodeConfig() {
-    const config = document.getElementById('config-content').value;
-    const path = document.getElementById('config-file-path').value;
-    const filename = path.split('/').pop();
+// 加载日志
+async function loadViewerLogs() {
+    const logContent = document.getElementById('viewer-log-content');
+    logContent.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>加载日志中...</div></div>';
 
-    const blob = new Blob([config], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+        const search = document.getElementById('viewer-log-search').value;
+        const level = document.getElementById('viewer-log-level').value;
 
-    showToast('配置文件已下载', 'success');
+        let url = `${API_BASE}/nodes/${currentViewNodeId}/logs`;
+        if (search || level) {
+            url += '/search?';
+            if (search) url += `q=${encodeURIComponent(search)}&`;
+            if (level) url += `level=${encodeURIComponent(level)}`;
+        }
+
+        const res = await authFetch(url);
+        const data = await res.json();
+
+        if (data.code === 0) {
+            const logs = data.data.logs || [];
+            document.getElementById('viewer-log-count').textContent = `共 ${logs.length} 条日志`;
+            document.getElementById('viewer-last-update').textContent = `最后更新: ${new Date().toLocaleTimeString()}`;
+
+            if (logs.length === 0) {
+                logContent.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无日志</div></div>';
+            } else {
+                logContent.innerHTML = logs.map(log => `<div class="log-line">${escapeHtml(log)}</div>`).join('');
+            }
+        } else {
+            logContent.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载日志失败</div></div>';
+            showToast('获取日志失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        console.error('加载日志失败:', e);
+        logContent.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载日志失败</div></div>';
+        showToast('获取日志失败', 'error');
+    }
+}
+
+// 刷新日志
+function refreshViewerLogs() {
+    loadViewerLogs();
+}
+
+// 清空日志
+async function clearViewerLogs() {
+    if (!confirm('确定要清空日志吗？')) return;
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes/${currentViewNodeId}/logs/clear`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+
+        if (data.code === 0) {
+            showToast('日志已清空', 'success');
+            loadViewerLogs();
+        } else {
+            showToast('清空日志失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        console.error('清空日志失败:', e);
+        showToast('清空日志失败', 'error');
+    }
+}
+
+// 下载当前内容（配置或日志）
+function downloadViewerContent() {
+    if (currentViewerTab === 'config') {
+        const config = document.getElementById('config-content').value;
+        const path = document.getElementById('config-file-path').value;
+        const filename = path.split('/').pop();
+
+        const blob = new Blob([config], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('配置文件已下载', 'success');
+    } else {
+        const logs = document.getElementById('viewer-log-content').innerText;
+        const filename = `node-${currentViewNodeId}-logs.txt`;
+
+        const blob = new Blob([logs], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('日志文件已下载', 'success');
+    }
+}
+
+// HTML 转义
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // ===== 日志查看功能 =====
