@@ -93,18 +93,18 @@ func (s *Server) setupRoutes() {
 	nodes := api.Group("/nodes")
 	{
 		nodes.GET("", s.nodeHandler.GetAllNodes)
-		nodes.GET("/:id", s.nodeHandler.GetNode)
-		nodes.GET("/:id/config-file", s.nodeHandler.GetNodeConfigFile)
 		nodes.POST("", s.nodeHandler.CreateNode)
-		nodes.PUT("/:id", s.nodeHandler.UpdateNode)
-		nodes.DELETE("/:id", s.nodeHandler.DeleteNode)
+		nodes.GET("/:id/config-file", s.nodeHandler.GetNodeConfigFile)
+		nodes.GET("/:id/status", s.nodeHandler.GetNodeStatus)
+		nodes.GET("/:id/logs", s.logHandler.GetNodeLogs)
+		nodes.GET("/:id/logs/search", s.logHandler.SearchNodeLogs)
+		nodes.POST("/:id/logs/clear", s.logHandler.ClearNodeLogs)
 		nodes.POST("/:id/start", s.nodeHandler.StartNode)
 		nodes.POST("/:id/stop", s.nodeHandler.StopNode)
 		nodes.POST("/:id/restart", s.nodeHandler.RestartNode)
-		nodes.GET("/:id/status", s.nodeHandler.GetNodeStatus)
-		nodes.GET("/:id/logs", s.logHandler.GetNodeLogs)
-		nodes.POST("/:id/logs/clear", s.logHandler.ClearNodeLogs)
-		nodes.GET("/:id/logs/search", s.logHandler.SearchNodeLogs)
+		nodes.GET("/:id", s.nodeHandler.GetNode)
+		nodes.PUT("/:id", s.nodeHandler.UpdateNode)
+		nodes.DELETE("/:id", s.nodeHandler.DeleteNode)
 	}
 
 	// 路由规则 API
