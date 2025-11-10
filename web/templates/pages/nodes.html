@@ -36,6 +36,7 @@
         <div class="mode-switch">
             <label>配置模式：</label>
             <button type="button" class="switch-btn active" onclick="switchConfigMode('form')">表单模式</button>
+            <button type="button" class="switch-btn" onclick="switchConfigMode('url')">链接模式</button>
             <button type="button" class="switch-btn" onclick="switchConfigMode('json')">JSON模式</button>
         </div>
 
@@ -209,6 +210,28 @@
                             <input type="text" id="trojan-sni" placeholder="example.com">
                         </div>
                     </div>
+
+                    <!-- 表单模式导出按钮 -->
+                    <div class="form-group" style="margin-top: 20px;">
+                        <button type="button" class="btn" onclick="generateUrlFromForm()">← 生成协议链接</button>
+                    </div>
+                </div>
+
+                <!-- URL 链接模式 -->
+                <div id="url-mode" class="form-section">
+                    <div class="form-group">
+                        <label>节点名称 *</label>
+                        <input type="text" id="node-name-url" placeholder="例如: 香港节点">
+                    </div>
+                    <div class="form-group">
+                        <label>协议链接 *</label>
+                        <textarea id="node-url" placeholder="vless://uuid@server:port?参数..." style="min-height: 150px; font-family: monospace;"></textarea>
+                        <small>支持 vless://, vmess://, trojan://, socks5:// 格式</small>
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn" onclick="parseUrlToForm()">→ 解析到表单</button>
+                        <button type="button" class="btn" onclick="parseUrlToJson()">→ 解析到JSON</button>
+                    </div>
                 </div>
 
                 <!-- JSON 模式 -->
@@ -230,6 +253,9 @@
                         <label>配置 (JSON) *</label>
                         <textarea id="node-config-json" placeholder='{"server":"1.2.3.4","server_port":1080}' style="min-height: 200px; font-family: monospace;"></textarea>
                         <small>请输入完整的 sing-box outbound 配置</small>
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn" onclick="generateUrlFromJson()">← 生成链接</button>
                     </div>
                 </div>
             </div>
@@ -286,29 +312,36 @@
 let currentLogNodeId = null;
 let currentLogNodeName = null;
 
-// 当前配置模式（form 或 json）
+// 当前配置模式（form, url 或 json）
 let currentConfigMode = 'form';
 
 // 切换配置模式
 function switchConfigMode(mode) {
     currentConfigMode = mode;
     const formMode = document.getElementById('form-mode');
+    const urlMode = document.getElementById('url-mode');
     const jsonMode = document.getElementById('json-mode');
     const btns = document.querySelectorAll('.switch-btn');
 
+    // 更新按钮状态
     btns.forEach((btn, idx) => {
-        if ((mode === 'form' && idx === 0) || (mode === 'json' && idx === 1)) {
+        if ((mode === 'form' && idx === 0) || (mode === 'url' && idx === 1) || (mode === 'json' && idx === 2)) {
             btn.classList.add('active');
         } else {
             btn.classList.remove('active');
         }
     });
 
+    // 显示/隐藏对应模式
+    formMode.classList.remove('active');
+    urlMode.classList.remove('active');
+    jsonMode.classList.remove('active');
+
     if (mode === 'form') {
         formMode.classList.add('active');
-        jsonMode.classList.remove('active');
+    } else if (mode === 'url') {
+        urlMode.classList.add('active');
     } else {
-        formMode.classList.remove('active');
         jsonMode.classList.add('active');
     }
 }
@@ -452,6 +485,383 @@ function loadConfigToForm(config) {
     }
 }
 
+// ===== 协议链接解析和生成函数 =====
+
+// 从协议链接解析配置
+function parseUrlToConfig(url) {
+    url = url.trim();
+
+    if (url.startsWith('vless://')) {
+        return parseVlessUrl(url);
+    } else if (url.startsWith('vmess://')) {
+        return parseVmessUrl(url);
+    } else if (url.startsWith('trojan://')) {
+        return parseTrojanUrl(url);
+    } else if (url.startsWith('socks5://') || url.startsWith('socks://')) {
+        return parseSocksUrl(url);
+    } else {
+        throw new Error('不支持的协议类型');
+    }
+}
+
+// 解析 VLESS URL
+function parseVlessUrl(url) {
+    // vless://uuid@server:port?参数
+    const match = url.match(/^vless:\/\/([^@]+)@([^:?]+):(\d+)(\?.*)?$/);
+    if (!match) throw new Error('VLESS URL 格式错误');
+
+    const [, uuid, server, port, queryStr] = match;
+    const params = new URLSearchParams(queryStr || '');
+
+    const config = {
+        type: 'vless',
+        server: server,
+        server_port: parseInt(port),
+        uuid: uuid
+    };
+
+    // flow
+    if (params.get('flow')) {
+        config.flow = params.get('flow');
+    }
+
+    // encryption
+    if (params.get('encryption')) {
+        config.encryption = params.get('encryption');
+    }
+
+    // TLS/Reality
+    const security = params.get('security');
+    if (security === 'tls' || security === 'reality') {
+        config.tls = { enabled: true };
+
+        if (params.get('sni')) {
+            config.tls.server_name = params.get('sni');
+        }
+
+        if (security === 'reality') {
+            config.tls.reality = { enabled: true };
+            if (params.get('pbk')) {
+                config.tls.reality.public_key = params.get('pbk');
+            }
+            if (params.get('sid')) {
+                config.tls.reality.short_id = params.get('sid');
+            }
+        }
+
+        // uTLS fingerprint
+        if (params.get('fp')) {
+            config.tls.utls = {
+                enabled: true,
+                fingerprint: params.get('fp')
+            };
+        }
+    }
+
+    return config;
+}
+
+// 解析 VMess URL
+function parseVmessUrl(url) {
+    // vmess://base64(json)
+    const base64Str = url.substring(8);
+    try {
+        const jsonStr = atob(base64Str);
+        const vmessObj = JSON.parse(jsonStr);
+
+        const config = {
+            type: 'vmess',
+            server: vmessObj.add,
+            server_port: parseInt(vmessObj.port),
+            uuid: vmessObj.id
+        };
+
+        if (vmessObj.aid) {
+            config.alter_id = parseInt(vmessObj.aid);
+        }
+
+        if (vmessObj.scy) {
+            config.security = vmessObj.scy;
+        }
+
+        // TLS
+        if (vmessObj.tls === 'tls') {
+            config.tls = { enabled: true };
+            if (vmessObj.sni) {
+                config.tls.server_name = vmessObj.sni;
+            }
+        }
+
+        return config;
+    } catch (e) {
+        throw new Error('VMess URL 解析失败: ' + e.message);
+    }
+}
+
+// 解析 Trojan URL
+function parseTrojanUrl(url) {
+    // trojan://password@server:port?参数
+    const match = url.match(/^trojan:\/\/([^@]+)@([^:?]+):(\d+)(\?.*)?$/);
+    if (!match) throw new Error('Trojan URL 格式错误');
+
+    const [, password, server, port, queryStr] = match;
+    const params = new URLSearchParams(queryStr || '');
+
+    const config = {
+        type: 'trojan',
+        server: server,
+        server_port: parseInt(port),
+        password: decodeURIComponent(password),
+        tls: { enabled: true }
+    };
+
+    if (params.get('sni')) {
+        config.tls.server_name = params.get('sni');
+    }
+
+    return config;
+}
+
+// 解析 SOCKS5 URL
+function parseSocksUrl(url) {
+    // socks5://[username:password@]server:port
+    const match = url.match(/^socks5?:\/\/(?:([^:]+):([^@]+)@)?([^:]+):(\d+)$/);
+    if (!match) throw new Error('SOCKS URL 格式错误');
+
+    const [, username, password, server, port] = match;
+
+    const config = {
+        type: 'socks',
+        server: server,
+        server_port: parseInt(port),
+        version: '5'
+    };
+
+    if (username) {
+        config.username = decodeURIComponent(username);
+    }
+    if (password) {
+        config.password = decodeURIComponent(password);
+    }
+
+    return config;
+}
+
+// 从配置生成协议链接
+function configToUrl(config) {
+    const type = config.type;
+
+    if (type === 'vless') {
+        return generateVlessUrl(config);
+    } else if (type === 'vmess') {
+        return generateVmessUrl(config);
+    } else if (type === 'trojan') {
+        return generateTrojanUrl(config);
+    } else if (type === 'socks') {
+        return generateSocksUrl(config);
+    } else {
+        throw new Error('不支持的协议类型: ' + type);
+    }
+}
+
+// 生成 VLESS URL
+function generateVlessUrl(config) {
+    let url = `vless://${config.uuid}@${config.server}:${config.server_port}`;
+    const params = new URLSearchParams();
+
+    if (config.flow) {
+        params.set('flow', config.flow);
+    }
+
+    params.set('encryption', config.encryption || 'none');
+
+    if (config.tls && config.tls.enabled) {
+        if (config.tls.reality && config.tls.reality.enabled) {
+            params.set('security', 'reality');
+            if (config.tls.reality.public_key) {
+                params.set('pbk', config.tls.reality.public_key);
+            }
+            if (config.tls.reality.short_id) {
+                params.set('sid', config.tls.reality.short_id);
+            }
+        } else {
+            params.set('security', 'tls');
+        }
+
+        if (config.tls.server_name) {
+            params.set('sni', config.tls.server_name);
+        }
+
+        if (config.tls.utls && config.tls.utls.fingerprint) {
+            params.set('fp', config.tls.utls.fingerprint);
+        }
+    } else {
+        params.set('security', 'none');
+    }
+
+    params.set('type', 'tcp');
+    params.set('headerType', 'none');
+
+    return url + '?' + params.toString();
+}
+
+// 生成 VMess URL
+function generateVmessUrl(config) {
+    const vmessObj = {
+        v: '2',
+        ps: '',
+        add: config.server,
+        port: String(config.server_port),
+        id: config.uuid,
+        aid: String(config.alter_id || 0),
+        scy: config.security || 'auto',
+        net: 'tcp',
+        type: 'none',
+        host: '',
+        path: '',
+        tls: (config.tls && config.tls.enabled) ? 'tls' : '',
+        sni: (config.tls && config.tls.server_name) || ''
+    };
+
+    const jsonStr = JSON.stringify(vmessObj);
+    const base64Str = btoa(jsonStr);
+    return 'vmess://' + base64Str;
+}
+
+// 生成 Trojan URL
+function generateTrojanUrl(config) {
+    let url = `trojan://${encodeURIComponent(config.password)}@${config.server}:${config.server_port}`;
+    const params = new URLSearchParams();
+
+    if (config.tls && config.tls.server_name) {
+        params.set('sni', config.tls.server_name);
+    }
+
+    params.set('type', 'tcp');
+
+    const queryStr = params.toString();
+    return queryStr ? url + '?' + queryStr : url;
+}
+
+// 生成 SOCKS5 URL
+function generateSocksUrl(config) {
+    let url = 'socks5://';
+
+    if (config.username && config.password) {
+        url += `${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}@`;
+    }
+
+    url += `${config.server}:${config.server_port}`;
+    return url;
+}
+
+// 从 URL 模式解析到表单模式
+function parseUrlToForm() {
+    const url = document.getElementById('node-url').value.trim();
+    if (!url) {
+        showToast('请输入协议链接', 'error');
+        return;
+    }
+
+    try {
+        const config = parseUrlToConfig(url);
+        const name = document.getElementById('node-name-url').value;
+
+        // 切换到表单模式
+        switchConfigMode('form');
+
+        // 设置名称
+        if (name) {
+            document.getElementById('node-name-form').value = name;
+        }
+
+        // 加载配置到表单
+        loadConfigToForm(config);
+
+        showToast('链接解析成功', 'success');
+    } catch (e) {
+        showToast('链接解析失败: ' + e.message, 'error');
+    }
+}
+
+// 从 URL 模式解析到 JSON 模式
+function parseUrlToJson() {
+    const url = document.getElementById('node-url').value.trim();
+    if (!url) {
+        showToast('请输入协议链接', 'error');
+        return;
+    }
+
+    try {
+        const config = parseUrlToConfig(url);
+        const name = document.getElementById('node-name-url').value;
+
+        // 切换到JSON模式
+        switchConfigMode('json');
+
+        // 设置名称和配置
+        if (name) {
+            document.getElementById('node-name-json').value = name;
+        }
+        document.getElementById('node-type-json').value = config.type;
+        document.getElementById('node-config-json').value = JSON.stringify(config, null, 2);
+
+        showToast('链接解析成功', 'success');
+    } catch (e) {
+        showToast('链接解析失败: ' + e.message, 'error');
+    }
+}
+
+// 从表单模式生成链接
+function generateUrlFromForm() {
+    try {
+        const config = buildConfigFromForm();
+        const url = configToUrl(config);
+        const name = document.getElementById('node-name-form').value;
+
+        // 切换到链接模式
+        switchConfigMode('url');
+
+        // 设置链接和名称
+        document.getElementById('node-url').value = url;
+        if (name) {
+            document.getElementById('node-name-url').value = name;
+        }
+
+        showToast('链接生成成功', 'success');
+    } catch (e) {
+        showToast('链接生成失败: ' + e.message, 'error');
+    }
+}
+
+// 从 JSON 模式生成链接
+function generateUrlFromJson() {
+    const configText = document.getElementById('node-config-json').value.trim();
+    if (!configText) {
+        showToast('请输入配置', 'error');
+        return;
+    }
+
+    try {
+        const config = JSON.parse(configText);
+        const url = configToUrl(config);
+        const name = document.getElementById('node-name-json').value;
+
+        // 切换到链接模式
+        switchConfigMode('url');
+
+        // 设置链接和名称
+        document.getElementById('node-url').value = url;
+        if (name) {
+            document.getElementById('node-name-url').value = name;
+        }
+
+        showToast('链接生成成功', 'success');
+    } catch (e) {
+        showToast('链接生成失败: ' + e.message, 'error');
+    }
+}
+
 // 加载节点列表
 async function loadNodes() {
     const tbody = document.getElementById('nodes-tbody');
@@ -562,6 +972,29 @@ async function saveNode(e) {
 
         const config = buildConfigFromForm();
         configText = JSON.stringify(config);
+    } else if (currentConfigMode === 'url') {
+        // URL模式 - 从链接解析配置
+        name = document.getElementById('node-name-url').value;
+        const url = document.getElementById('node-url').value;
+
+        if (!name || !name.trim()) {
+            showToast('请填写节点名称', 'error');
+            return;
+        }
+
+        if (!url || !url.trim()) {
+            showToast('请输入协议链接', 'error');
+            return;
+        }
+
+        try {
+            const config = parseUrlToConfig(url);
+            type = config.type;
+            configText = JSON.stringify(config);
+        } catch (err) {
+            showToast('链接解析失败: ' + err.message, 'error');
+            return;
+        }
     } else {
         // JSON模式 - 直接使用JSON
         name = document.getElementById('node-name-json').value;
@@ -700,6 +1133,15 @@ async function editNode(id) {
             document.getElementById('node-name-json').value = node.name;
             document.getElementById('node-type-json').value = node.type;
             document.getElementById('node-config-json').value = JSON.stringify(config, null, 2);
+
+            // 填充URL模式数据
+            try {
+                const url = configToUrl(config);
+                document.getElementById('node-name-url').value = node.name;
+                document.getElementById('node-url').value = url;
+            } catch (e) {
+                console.warn('无法生成协议链接:', e);
+            }
 
             // 默认显示表单模式
             switchConfigMode('form');
