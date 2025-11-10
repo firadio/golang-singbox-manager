@@ -33,24 +33,36 @@
             <button class="modal-close" onclick="closeModal('createNodeModal')">&times;</button>
         </div>
 
-        <div class="mode-switch">
-            <label>配置模式：</label>
-            <button type="button" class="switch-btn active" onclick="switchConfigMode('form')">表单模式</button>
-            <button type="button" class="switch-btn" onclick="switchConfigMode('url')">链接模式</button>
-            <button type="button" class="switch-btn" onclick="switchConfigMode('json')">JSON模式</button>
-        </div>
-
         <form onsubmit="saveNode(event)">
             <div class="modal-body">
                 <input type="hidden" id="node-id">
 
+                <!-- 公共字段 -->
+                <div class="form-group">
+                    <label>节点名称 *</label>
+                    <input type="text" id="node-name" placeholder="例如: 香港节点">
+                </div>
+
+                <div class="form-group">
+                    <label>中转节点 (Detour)</label>
+                    <select id="node-detour">
+                        <option value="">无 (直连)</option>
+                    </select>
+                    <small>通过其他节点进行中转，实现链式代理</small>
+                </div>
+
+                <!-- 配置区域 -->
+                <div class="form-group">
+                    <label>配置</label>
+                    <div class="mode-switch" style="margin-top: 10px;">
+                        <button type="button" class="switch-btn active" onclick="switchConfigMode('form')">表单模式</button>
+                        <button type="button" class="switch-btn" onclick="switchConfigMode('url')">链接模式</button>
+                        <button type="button" class="switch-btn" onclick="switchConfigMode('json')">JSON模式</button>
+                    </div>
+                </div>
+
                 <!-- 表单模式 -->
                 <div id="form-mode" class="form-section active">
-                    <div class="form-group">
-                        <label>节点名称 *</label>
-                        <input type="text" id="node-name-form" placeholder="例如: 香港节点">
-                    </div>
-
                     <div class="form-group">
                         <label>节点类型 *</label>
                         <select id="node-type-form" onchange="updateNodeTypeFields()">
@@ -59,14 +71,6 @@
                             <option value="vmess">VMess</option>
                             <option value="trojan">Trojan</option>
                         </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>中转节点 (Detour)</label>
-                        <select id="node-detour-form">
-                            <option value="">无 (直连)</option>
-                        </select>
-                        <small>通过其他节点进行中转，实现链式代理</small>
                     </div>
 
                     <!-- SOCKS 配置 -->
@@ -228,10 +232,6 @@
                 <!-- URL 链接模式 -->
                 <div id="url-mode" class="form-section">
                     <div class="form-group">
-                        <label>节点名称 *</label>
-                        <input type="text" id="node-name-url" placeholder="例如: 香港节点">
-                    </div>
-                    <div class="form-group">
                         <label>协议链接 *</label>
                         <textarea id="node-url" placeholder="vless://uuid@server:port?参数..." style="min-height: 150px; font-family: monospace;"></textarea>
                         <small>支持 vless://, vmess://, trojan://, socks5:// 格式</small>
@@ -245,22 +245,9 @@
                 <!-- JSON 模式 -->
                 <div id="json-mode" class="form-section">
                     <div class="form-group">
-                        <label>节点名称 *</label>
-                        <input type="text" id="node-name-json" placeholder="例如: 香港节点">
-                    </div>
-                    <div class="form-group">
-                        <label>节点类型 *</label>
-                        <select id="node-type-json">
-                            <option value="socks">SOCKS5</option>
-                            <option value="vless">VLESS</option>
-                            <option value="vmess">VMess</option>
-                            <option value="trojan">Trojan</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
                         <label>配置 (JSON) *</label>
-                        <textarea id="node-config-json" placeholder='{"server":"1.2.3.4","server_port":1080}' style="min-height: 200px; font-family: monospace;"></textarea>
-                        <small>请输入完整的 sing-box outbound 配置</small>
+                        <textarea id="node-config-json" placeholder='{"type":"vless","server":"1.2.3.4","server_port":443,...}' style="min-height: 200px; font-family: monospace;"></textarea>
+                        <small>请输入完整的 sing-box outbound 配置，必须包含 type 字段</small>
                     </div>
                     <div class="form-group">
                         <button type="button" class="btn" onclick="generateUrlFromJson()">← 生成链接</button>
@@ -468,8 +455,8 @@ function buildConfigFromForm() {
         if (sni) config.tls.server_name = sni;
     }
 
-    // 处理中转节点 (Detour)
-    const detour = document.getElementById('node-detour-form').value;
+    // 处理中转节点 (Detour) - 使用统一的ID
+    const detour = document.getElementById('node-detour').value;
     if (detour) {
         config.detour = detour;
     }
@@ -483,8 +470,8 @@ function loadConfigToForm(config) {
     document.getElementById('node-type-form').value = type;
     updateNodeTypeFields();
 
-    // 加载中转节点
-    document.getElementById('node-detour-form').value = config.detour || '';
+    // 加载中转节点 - 使用统一的ID
+    document.getElementById('node-detour').value = config.detour || '';
 
     if (type === 'socks') {
         document.getElementById('socks-server').value = config.server || '';
@@ -809,17 +796,11 @@ function parseUrlToForm() {
 
     try {
         const config = parseUrlToConfig(url);
-        const name = document.getElementById('node-name-url').value;
 
         // 切换到表单模式
         switchConfigMode('form');
 
-        // 设置名称
-        if (name) {
-            document.getElementById('node-name-form').value = name;
-        }
-
-        // 加载配置到表单
+        // 加载配置到表单（节点名称已经在公共字段了）
         loadConfigToForm(config);
 
         showToast('链接解析成功', 'success');
@@ -838,16 +819,11 @@ function parseUrlToJson() {
 
     try {
         const config = parseUrlToConfig(url);
-        const name = document.getElementById('node-name-url').value;
 
         // 切换到JSON模式
         switchConfigMode('json');
 
-        // 设置名称和配置
-        if (name) {
-            document.getElementById('node-name-json').value = name;
-        }
-        document.getElementById('node-type-json').value = config.type;
+        // 设置配置（节点名称已经在公共字段了）
         document.getElementById('node-config-json').value = JSON.stringify(config, null, 2);
 
         showToast('链接解析成功', 'success');
@@ -861,16 +837,12 @@ function generateUrlFromForm() {
     try {
         const config = buildConfigFromForm();
         const url = configToUrl(config);
-        const name = document.getElementById('node-name-form').value;
 
         // 切换到链接模式
         switchConfigMode('url');
 
-        // 设置链接和名称
+        // 设置链接（节点名称已经在公共字段了）
         document.getElementById('node-url').value = url;
-        if (name) {
-            document.getElementById('node-name-url').value = name;
-        }
 
         showToast('链接生成成功', 'success');
     } catch (e) {
@@ -889,16 +861,12 @@ function generateUrlFromJson() {
     try {
         const config = JSON.parse(configText);
         const url = configToUrl(config);
-        const name = document.getElementById('node-name-json').value;
 
         // 切换到链接模式
         switchConfigMode('url');
 
-        // 设置链接和名称
+        // 设置链接（节点名称已经在公共字段了）
         document.getElementById('node-url').value = url;
-        if (name) {
-            document.getElementById('node-name-url').value = name;
-        }
 
         showToast('链接生成成功', 'success');
     } catch (e) {
@@ -908,7 +876,7 @@ function generateUrlFromJson() {
 
 // 加载中转节点选项
 async function loadDetourOptions(currentNodeId = null) {
-    const select = document.getElementById('node-detour-form');
+    const select = document.getElementById('node-detour');
 
     try {
         const res = await authFetch(`${API_BASE}/nodes`);
@@ -1033,29 +1001,23 @@ async function saveNode(e) {
     const nodeId = document.getElementById('node-id').value;
     const isEdit = nodeId !== '';
 
-    let name, type, configText;
+    // 节点名称使用统一的公共字段
+    const name = document.getElementById('node-name').value;
+    if (!name || !name.trim()) {
+        showToast('请填写节点名称', 'error');
+        return;
+    }
+
+    let type, configText;
 
     if (currentConfigMode === 'form') {
         // 表单模式 - 从表单构建配置
-        name = document.getElementById('node-name-form').value;
         type = document.getElementById('node-type-form').value;
-
-        if (!name || !name.trim()) {
-            showToast('请填写节点名称', 'error');
-            return;
-        }
-
         const config = buildConfigFromForm();
         configText = JSON.stringify(config);
     } else if (currentConfigMode === 'url') {
         // URL模式 - 从链接解析配置
-        name = document.getElementById('node-name-url').value;
         const url = document.getElementById('node-url').value;
-
-        if (!name || !name.trim()) {
-            showToast('请填写节点名称', 'error');
-            return;
-        }
 
         if (!url || !url.trim()) {
             showToast('请输入协议链接', 'error');
@@ -1071,19 +1033,17 @@ async function saveNode(e) {
             return;
         }
     } else {
-        // JSON模式 - 直接使用JSON
-        name = document.getElementById('node-name-json').value;
-        type = document.getElementById('node-type-json').value;
+        // JSON模式 - 直接使用JSON，从JSON中提取type
         configText = document.getElementById('node-config-json').value;
 
-        if (!name || !name.trim()) {
-            showToast('请填写节点名称', 'error');
-            return;
-        }
-
-        // 验证JSON格式
+        // 验证JSON格式并提取type
         try {
-            JSON.parse(configText);
+            const config = JSON.parse(configText);
+            if (!config.type) {
+                showToast('JSON配置中缺少 type 字段', 'error');
+                return;
+            }
+            type = config.type;
         } catch {
             showToast('JSON 格式错误，请检查配置', 'error');
             return;
@@ -1203,19 +1163,18 @@ async function editNode(id) {
             // 加载中转节点选项 (排除当前节点)
             await loadDetourOptions(node.id);
 
-            // 填充表单模式数据
-            document.getElementById('node-name-form').value = node.name;
+            // 填充公共字段：节点名称
+            document.getElementById('node-name').value = node.name;
+
+            // 填充表单模式配置
             loadConfigToForm(config);
 
-            // 填充JSON模式数据
-            document.getElementById('node-name-json').value = node.name;
-            document.getElementById('node-type-json').value = node.type;
+            // 填充JSON模式配置
             document.getElementById('node-config-json').value = JSON.stringify(config, null, 2);
 
-            // 填充URL模式数据
+            // 填充URL模式配置
             try {
                 const url = configToUrl(config);
-                document.getElementById('node-name-url').value = node.name;
                 document.getElementById('node-url').value = url;
             } catch (e) {
                 console.warn('无法生成协议链接:', e);
