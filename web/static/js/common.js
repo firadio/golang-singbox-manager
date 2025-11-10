@@ -1,40 +1,32 @@
 // API 配置
 const API_BASE = '/api';
 
-// 认证相关
-function getToken() {
-    return localStorage.getItem('token');
-}
-
-function setToken(token) {
-    localStorage.setItem('token', token);
-}
-
-function removeToken() {
-    localStorage.removeItem('token');
+// 认证相关 - 使用 cookie，浏览器自动发送
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
 }
 
 function isAuthenticated() {
-    return !!getToken();
+    return !!getCookie('session_token');
 }
 
-// 带认证的 fetch
+function clearSession() {
+    // 清除 cookie
+    document.cookie = 'session_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+}
+
+// 带认证的 fetch - cookie 会自动发送，不需要手动添加
 async function authFetch(url, options = {}) {
-    const token = getToken();
-    if (!token) {
-        window.location.href = '/login';
-        throw new Error('No token');
-    }
-
-    const headers = {
-        ...options.headers,
-        'Authorization': `Bearer ${token}`
-    };
-
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url, {
+        ...options,
+        credentials: 'same-origin', // 确保发送 cookie
+    });
 
     if (response.status === 401) {
-        removeToken();
+        clearSession();
         window.location.href = '/login';
         throw new Error('Unauthorized');
     }
@@ -132,7 +124,7 @@ function highlightCurrentNav() {
 // 登出功能
 function logout() {
     if (confirm('确定要退出登录吗？')) {
-        removeToken();
+        clearSession();
         window.location.href = '/login';
     }
 }

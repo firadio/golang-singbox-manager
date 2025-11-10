@@ -14,9 +14,9 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// 从 Authorization header 获取 token
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		// 从 cookie 获取 session_token
+		sessionToken, err := c.Cookie("session_token")
+		if err != nil || sessionToken == "" {
 			c.JSON(401, gin.H{
 				"code":    401,
 				"message": "Unauthorized",
@@ -25,21 +25,8 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// 检查格式: "Bearer <token>"
-		const prefix = "Bearer "
-		if len(authHeader) < len(prefix) || authHeader[:len(prefix)] != prefix {
-			c.JSON(401, gin.H{
-				"code":    401,
-				"message": "Unauthorized",
-			})
-			c.Abort()
-			return
-		}
-
-		token := authHeader[len(prefix):]
-
-		// 简单验证: token 就是密码
-		if token != cfg.Auth.Password {
+		// 简单验证: session_token 就是密码
+		if sessionToken != cfg.Auth.Password {
 			c.JSON(401, gin.H{
 				"code":    401,
 				"message": "Unauthorized",

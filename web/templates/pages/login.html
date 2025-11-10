@@ -45,7 +45,7 @@
                 const data = await response.json();
 
                 if (data.code === 0) {
-                    setToken(data.data.token);
+                    // Cookie 已由服务器设置，无需手动处理
                     showToast('登录成功', 'success');
                     setTimeout(() => {
                         window.location.href = '/nodes';

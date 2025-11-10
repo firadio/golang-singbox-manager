@@ -166,9 +166,18 @@ func (h *SettingsHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// 返回 token（简化处理：token 就是密码）
+	// 设置 cookie（使用密码作为 session_token）
+	c.SetCookie(
+		"session_token",        // name
+		h.config.Auth.Password, // value
+		86400*30,               // maxAge (30天)
+		"/",                    // path
+		"",                     // domain
+		false,                  // secure
+		true,                   // httpOnly
+	)
+
 	Success(c, gin.H{
-		"token":   h.config.Auth.Password,
 		"message": "Login successful",
 	})
 }
