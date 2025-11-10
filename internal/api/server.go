@@ -94,6 +94,7 @@ func (s *Server) setupRoutes() {
 	{
 		nodes.GET("", s.nodeHandler.GetAllNodes)
 		nodes.GET("/:id", s.nodeHandler.GetNode)
+		nodes.GET("/:id/config-file", s.nodeHandler.GetNodeConfigFile)
 		nodes.POST("", s.nodeHandler.CreateNode)
 		nodes.PUT("/:id", s.nodeHandler.UpdateNode)
 		nodes.DELETE("/:id", s.nodeHandler.DeleteNode)

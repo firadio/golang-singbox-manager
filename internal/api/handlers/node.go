@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/firadio/golang-singbox-manager/internal/network"
@@ -288,4 +290,27 @@ func (h *NodeHandler) GetNodeStatus(c *gin.Context) {
 	}
 
 	Success(c, gin.H{"status": status})
+}
+
+// GetNodeConfigFile 获取节点的真实配置文件内容
+func (h *NodeHandler) GetNodeConfigFile(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		Error(c, 1002, "Invalid node ID")
+		return
+	}
+
+	// 读取配置文件
+	configPath := fmt.Sprintf("configs/singbox/node_%d.json", id)
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		log.Errorf("Failed to read config file: %v", err)
+		Error(c, 1014, "Failed to read config file")
+		return
+	}
+
+	Success(c, gin.H{
+		"path":    configPath,
+		"content": string(content),
+	})
 }

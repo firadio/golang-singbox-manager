@@ -1199,71 +1199,23 @@ async function editNode(id) {
 // 查看节点完整配置
 async function viewNodeConfig(nodeId, nodeName) {
     try {
-        // 获取节点配置文件内容
-        const res = await authFetch(`${API_BASE}/nodes/${nodeId}`);
+        // 获取真实的配置文件内容
+        const res = await authFetch(`${API_BASE}/nodes/${nodeId}/config-file`);
         const data = await res.json();
 
         if (data.code === 0 && data.data) {
-            const node = data.data;
-
             // 显示配置文件路径
-            const configPath = `configs/singbox/node_${nodeId}.json`;
-            document.getElementById('config-file-path').value = configPath;
+            document.getElementById('config-file-path').value = data.data.path;
 
-            // 显示完整配置
-            // 注意：node.config只包含outbound配置，需要构建完整的sing-box配置
-            const outboundConfig = JSON.parse(node.config);
-
-            // 构建完整的sing-box配置文件
-            const fullConfig = {
-                "log": {
-                    "level": "info"
-                },
-                "dns": {
-                    "servers": [
-                        {
-                            "tag": "dns",
-                            "type": "tls",
-                            "server": "1.0.0.1",
-                            "detour": `node-${nodeId}`
-                        }
-                    ]
-                },
-                "route": {
-                    "rules": [
-                        {
-                            "action": "sniff"
-                        },
-                        {
-                            "action": "hijack-dns",
-                            "protocol": "dns"
-                        }
-                    ],
-                    "final": `node-${nodeId}`
-                },
-                "inbounds": [
-                    {
-                        "type": "tun",
-                        "interface_name": node.tun_name,
-                        "address": [
-                            `${node.tun_ip}/30`
-                        ]
-                    }
-                ],
-                "outbounds": [
-                    {
-                        ...outboundConfig,
-                        "tag": `node-${nodeId}`
-                    }
-                ]
-            };
-
-            document.getElementById('config-content').value = JSON.stringify(fullConfig, null, 2);
+            // 显示真实的配置文件内容
+            // 格式化 JSON 以便阅读
+            const configContent = JSON.parse(data.data.content);
+            document.getElementById('config-content').value = JSON.stringify(configContent, null, 2);
             document.getElementById('config-modal-title').textContent = `节点配置 - ${nodeName}`;
 
             openModal('configViewerModal');
         } else {
-            showToast('获取节点配置失败: ' + data.message, 'error');
+            showToast('获取节点配置失败: ' + (data.message || '未知错误'), 'error');
         }
     } catch (e) {
         console.error('查看节点配置失败:', e);
