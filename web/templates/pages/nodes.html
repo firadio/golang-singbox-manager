@@ -960,8 +960,7 @@ async function loadNodes() {
                             : `<button class="btn btn-sm btn-success" onclick="startNode(${node.id})">启动</button>`
                         }
                         <button class="btn btn-sm" onclick="restartNode(${node.id})">重启</button>
-                        <button class="btn btn-sm" onclick="viewNodeLogs(${node.id}, '${node.name}')">查看日志</button>
-                        <button class="btn btn-sm" onclick="viewNodeConfig(${node.id}, '${node.name}')">查看配置</button>
+                        <button class="btn btn-sm" onclick="showViewMenu(${node.id}, '${node.name}', event)">查看</button>
                         <button class="btn btn-sm" onclick="editNode(${node.id})">编辑</button>
                         <button class="btn btn-sm btn-danger" onclick="deleteNode(${node.id}, '${node.name}')">删除</button>
                     </div>
@@ -1195,6 +1194,51 @@ async function editNode(id) {
 }
 
 // ===== 配置查看功能 =====
+
+// 显示查看菜单
+function showViewMenu(nodeId, nodeName, event) {
+    event.stopPropagation();
+
+    // 移除已存在的菜单
+    const existingMenu = document.querySelector('.view-dropdown-menu');
+    if (existingMenu) {
+        existingMenu.remove();
+    }
+
+    // 创建下拉菜单
+    const menu = document.createElement('div');
+    menu.className = 'view-dropdown-menu';
+    menu.innerHTML = `
+        <div class="view-menu-item" onclick="viewNodeLogs(${nodeId}, '${nodeName}'); closeViewMenu()">
+            <span>📋</span> 查看日志
+        </div>
+        <div class="view-menu-item" onclick="viewNodeConfig(${nodeId}, '${nodeName}'); closeViewMenu()">
+            <span>⚙️</span> 查看配置
+        </div>
+    `;
+
+    // 定位菜单
+    const button = event.target;
+    const rect = button.getBoundingClientRect();
+    menu.style.position = 'fixed';
+    menu.style.top = (rect.bottom + 5) + 'px';
+    menu.style.left = rect.left + 'px';
+
+    document.body.appendChild(menu);
+
+    // 点击其他地方关闭菜单
+    setTimeout(() => {
+        document.addEventListener('click', closeViewMenu, { once: true });
+    }, 0);
+}
+
+// 关闭查看菜单
+function closeViewMenu() {
+    const menu = document.querySelector('.view-dropdown-menu');
+    if (menu) {
+        menu.remove();
+    }
+}
 
 // 查看节点完整配置
 async function viewNodeConfig(nodeId, nodeName) {

@@ -2,8 +2,7 @@ package health
 
 import (
 	"context"
-	"fmt"
-	"net"
+	"os/exec"
 	"time"
 
 	"github.com/firadio/golang-singbox-manager/internal/storage"
@@ -91,40 +90,23 @@ func (c *Checker) checkAllNodes() {
 // checkNode 检查单个节点
 func (c *Checker) checkNode(node *storage.ProxyNode) (int, bool) {
 	// 使用 DNS 查询测试节点可用性
-	// 通过节点的 TUN 接口查询 1.1.1.1 的 DNS 服务
+	// 通过节点的路由表进行 DNS 查询，流量会经过代理节点
 	start := time.Now()
 
-	// 创建 DNS resolver，使用 1.1.1.1:53 作为 DNS 服务器
-	resolver := &net.Resolver{
-		PreferGo: true,
-		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			// 使用 TUN 接口的地址作为源地址
-			// 从 TUN 地址中提取 IP（去掉 /30）
-			tunAddr := node.TunAddress
-			if idx := len(tunAddr) - 3; idx > 0 && tunAddr[idx:] == "/30" {
-				tunAddr = tunAddr[:idx]
-			}
-
-			localAddr, err := net.ResolveTCPAddr(network, tunAddr+":0")
-			if err != nil {
-				return nil, fmt.Errorf("failed to resolve local address: %w", err)
-			}
-
-			dialer := &net.Dialer{
-				LocalAddr: localAddr,
-				Timeout:   5 * time.Second,
-			}
-
-			// 连接到 1.1.1.1:53
-			return dialer.DialContext(ctx, network, "1.1.1.1:53")
-		},
+	// 从 TUN 地址中提取 IP（去掉 /30）
+	tunAddr := node.TunAddress
+	if idx := len(tunAddr) - 3; idx > 0 && tunAddr[idx:] == "/30" {
+		tunAddr = tunAddr[:idx]
 	}
 
-	// 查询 cloudflare.com 的 A 记录
+	// 使用 dig 命令通过路由表查询 DNS
+	// -b 指定源地址，这样流量会通过对应的路由表和代理节点
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := resolver.LookupHost(ctx, "cloudflare.com")
+	cmd := exec.CommandContext(ctx, "dig", "@1.1.1.1", "cloudflare.com", "+short", "+time=5", "-b", tunAddr)
+	err := cmd.Run()
+
 	if err != nil {
 		log.Debugf("Node %d (%s) DNS query failed: %v", node.ID, node.Name, err)
 		return 0, false
