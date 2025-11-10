@@ -20,8 +20,14 @@ type Config struct {
 
 // ServerConfig HTTP 服务器配置
 type ServerConfig struct {
-	Host string `yaml:"host"`
-	Port int    `yaml:"port"`
+	Host        string `yaml:"host"`
+	Port        int    `yaml:"port"`
+	DeviceName  string `yaml:"device_name"`  // 设备名称，用于显示在界面上
+	HTTPSEnable bool   `yaml:"https_enable"` // 启用HTTPS
+	HTTPSPort   int    `yaml:"https_port"`   // HTTPS端口
+	CertFile    string `yaml:"cert_file"`    // 证书文件路径
+	KeyFile     string `yaml:"key_file"`     // 密钥文件路径
+	AutoCert    bool   `yaml:"auto_cert"`    // 自动生成自签名证书
 }
 
 // SingBoxConfig sing-box 配置
@@ -63,8 +69,14 @@ type MikrotikConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
-			Host: "0.0.0.0",
-			Port: 8080,
+			Host:        "0.0.0.0",
+			Port:        8080,
+			DeviceName:  "Sing-Box Manager",
+			HTTPSEnable: false,
+			HTTPSPort:   443,
+			CertFile:    "certs/cert.pem",
+			KeyFile:     "certs/key.pem",
+			AutoCert:    true,
 		},
 		SingBox: SingBoxConfig{
 			BinPath:   "/usr/local/bin/sing-box",

@@ -3,8 +3,10 @@ package handlers
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
+	"github.com/firadio/golang-singbox-manager/internal/cert"
 	"github.com/firadio/golang-singbox-manager/internal/config"
 	"github.com/firadio/golang-singbox-manager/internal/mikrotik"
 	"github.com/gin-gonic/gin"
@@ -31,7 +33,13 @@ func NewSettingsHandler(cfg *config.Config, configPath string, mtClient *mikroti
 func (h *SettingsHandler) GetSettings(c *gin.Context) {
 	// 返回配置时隐藏密码
 	settings := gin.H{
+		"device_name":            h.config.Server.DeviceName,
 		"web_port":               h.config.Server.Port,
+		"https_enable":           h.config.Server.HTTPSEnable,
+		"https_port":             h.config.Server.HTTPSPort,
+		"auto_cert":              h.config.Server.AutoCert,
+		"cert_file":              h.config.Server.CertFile,
+		"key_file":               h.config.Server.KeyFile,
 		"auth_enabled":           h.config.Auth.Enabled,
 		"auth_username":          h.config.Auth.Username,
 		"auth_password_set":      h.config.Auth.Password != "",
@@ -47,7 +55,13 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 // UpdateSettings 更新系统设置
 func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	var updateData struct {
+		DeviceName            string `json:"device_name"`
 		WebPort               int    `json:"web_port"`
+		HTTPSEnable           bool   `json:"https_enable"`
+		HTTPSPort             int    `json:"https_port"`
+		AutoCert              bool   `json:"auto_cert"`
+		CertContent           string `json:"cert_content"`
+		KeyContent            string `json:"key_content"`
 		AuthEnabled           bool   `json:"auth_enabled"`
 		AuthUsername          string `json:"auth_username"`
 		AuthPassword          string `json:"auth_password"`
@@ -66,9 +80,57 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 
 	// 记录旧端口
 	oldPort := h.config.Server.Port
+	oldHTTPSEnable := h.config.Server.HTTPSEnable
+	oldHTTPSPort := h.config.Server.HTTPSPort
 
 	// 更新配置
+	if updateData.DeviceName != "" {
+		h.config.Server.DeviceName = updateData.DeviceName
+	}
 	h.config.Server.Port = updateData.WebPort
+	h.config.Server.HTTPSEnable = updateData.HTTPSEnable
+	if updateData.HTTPSPort > 0 {
+		h.config.Server.HTTPSPort = updateData.HTTPSPort
+	}
+	h.config.Server.AutoCert = updateData.AutoCert
+
+	// 处理证书
+	if updateData.HTTPSEnable {
+		// 转换为绝对路径
+		certFile := h.config.Server.CertFile
+		keyFile := h.config.Server.KeyFile
+		if !filepath.IsAbs(certFile) {
+			certFile = filepath.Join(filepath.Dir(h.configPath), certFile)
+		}
+		if !filepath.IsAbs(keyFile) {
+			keyFile = filepath.Join(filepath.Dir(h.configPath), keyFile)
+		}
+
+		if updateData.AutoCert {
+			// 自动生成证书
+			if err := cert.GenerateSelfSignedCert(certFile, keyFile); err != nil {
+				log.Errorf("Failed to generate certificate: %v", err)
+				Error(c, 3010, "Failed to generate certificate")
+				return
+			}
+			log.Info("Self-signed certificate generated successfully")
+		} else if updateData.CertContent != "" && updateData.KeyContent != "" {
+			// 手动保存证书
+			if err := cert.SaveCertAndKey(updateData.CertContent, updateData.KeyContent, certFile, keyFile); err != nil {
+				log.Errorf("Failed to save certificate: %v", err)
+				Error(c, 3011, "Failed to save certificate")
+				return
+			}
+			log.Info("Certificate and key saved successfully")
+		}
+
+		// 验证证书
+		if err := cert.ValidateCertAndKey(certFile, keyFile); err != nil {
+			log.Errorf("Certificate validation failed: %v", err)
+			Error(c, 3012, "Certificate validation failed: "+err.Error())
+			return
+		}
+	}
 	h.config.Auth.Enabled = updateData.AuthEnabled
 	h.config.Auth.Username = updateData.AuthUsername
 	if updateData.AuthPassword != "" {
@@ -95,7 +157,9 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	log.Info("System settings updated successfully")
 
 	portChanged := oldPort != updateData.WebPort
+	httpsChanged := oldHTTPSEnable != updateData.HTTPSEnable || oldHTTPSPort != updateData.HTTPSPort
 	restartRequired := portChanged ||
+		httpsChanged ||
 		h.config.Auth.Enabled != updateData.AuthEnabled ||
 		h.config.Mikrotik.Enabled != updateData.MikrotikEnabled
 
@@ -237,6 +301,7 @@ func (h *SettingsHandler) GetAuthConfig(c *gin.Context) {
 		"auth_enabled":       h.config.Auth.Enabled,
 		"username_required":  h.config.Auth.Username != "",
 		"auth_username":      h.config.Auth.Username,
+		"device_name":        h.config.Server.DeviceName,
 	}
 	Success(c, authConfig)
 }

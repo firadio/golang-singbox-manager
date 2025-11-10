@@ -3,9 +3,56 @@
 <div class="card">
     <h3>Web服务设置</h3>
     <div class="form-group">
-        <label>监听端口</label>
+        <label>设备名称</label>
+        <input type="text" id="settings-device-name" placeholder="Sing-Box Manager">
+        <small>自定义显示在界面上的设备名称</small>
+    </div>
+    <div class="form-group">
+        <label>HTTP 监听端口</label>
         <input type="number" id="settings-web-port" placeholder="80">
         <small>修改端口后需要重启服务</small>
+    </div>
+
+    <div class="form-group">
+        <div class="checkbox-group" style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="settings-https-enable" onchange="toggleHTTPSSettings()">
+            <label style="margin: 0;">启用 HTTPS</label>
+        </div>
+        <small>启用后将同时监听HTTPS端口</small>
+    </div>
+
+    <div id="https-settings" style="display: none;">
+        <div class="form-group">
+            <label>HTTPS 监听端口</label>
+            <input type="number" id="settings-https-port" placeholder="443">
+            <small>HTTPS 服务端口，默认 443</small>
+        </div>
+
+        <div class="form-group">
+            <div class="checkbox-group" style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="settings-auto-cert" onchange="toggleCertMode()">
+                <label style="margin: 0;">自动生成自签名证书</label>
+            </div>
+            <small>勾选后将自动生成自签名证书，适用于测试环境</small>
+        </div>
+
+        <div id="manual-cert-section" style="display: none;">
+            <div class="form-group">
+                <label>证书内容 (PEM 格式)</label>
+                <textarea id="settings-cert-content" placeholder="-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----" style="min-height: 150px; font-family: monospace;"></textarea>
+                <small>粘贴完整的证书内容</small>
+            </div>
+
+            <div class="form-group">
+                <label>私钥内容 (PEM 格式)</label>
+                <textarea id="settings-key-content" placeholder="-----BEGIN RSA PRIVATE KEY-----
+...
+-----END RSA PRIVATE KEY-----" style="min-height: 150px; font-family: monospace;"></textarea>
+                <small>粘贴完整的私钥内容</small>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -108,6 +155,25 @@
 </div>
 
 <script>
+// 切换HTTPS设置显示
+function toggleHTTPSSettings() {
+    const httpsEnable = document.getElementById('settings-https-enable').checked;
+    const httpsSettings = document.getElementById('https-settings');
+    httpsSettings.style.display = httpsEnable ? 'block' : 'none';
+
+    // 如果启用HTTPS，检查证书模式
+    if (httpsEnable) {
+        toggleCertMode();
+    }
+}
+
+// 切换证书模式
+function toggleCertMode() {
+    const autoCert = document.getElementById('settings-auto-cert').checked;
+    const manualCertSection = document.getElementById('manual-cert-section');
+    manualCertSection.style.display = autoCert ? 'none' : 'block';
+}
+
 // 加载设置
 async function loadSettings() {
     try {
@@ -116,7 +182,11 @@ async function loadSettings() {
 
         if (data.code === 0 && data.data) {
             const settings = data.data;
+            document.getElementById('settings-device-name').value = settings.device_name || 'Sing-Box Manager';
             document.getElementById('settings-web-port').value = settings.web_port || 80;
+            document.getElementById('settings-https-enable').checked = settings.https_enable || false;
+            document.getElementById('settings-https-port').value = settings.https_port || 443;
+            document.getElementById('settings-auto-cert').checked = settings.auto_cert !== undefined ? settings.auto_cert : true;
             document.getElementById('settings-auth-enabled').checked = settings.auth_enabled || false;
             document.getElementById('settings-auth-username').value = settings.auth_username || '';
             document.getElementById('settings-health-enabled').checked = settings.health_check_enabled || false;
@@ -126,6 +196,9 @@ async function loadSettings() {
             document.getElementById('settings-mikrotik-port').value = settings.mikrotik_port || 8728;
             document.getElementById('settings-mikrotik-username').value = settings.mikrotik_username || 'admin';
             document.getElementById('settings-mikrotik-routing-table').value = settings.mikrotik_routing_table || 'main';
+
+            // 触发HTTPS设置显示/隐藏
+            toggleHTTPSSettings();
         }
     } catch (error) {
         console.error('Failed to load settings:', error);
@@ -135,8 +208,14 @@ async function loadSettings() {
 
 // 保存设置
 async function saveSettings() {
+    const deviceName = document.getElementById('settings-device-name').value;
     const webPort = parseInt(document.getElementById('settings-web-port').value);
     const currentPort = parseInt(window.location.port) || 80;
+    const httpsEnable = document.getElementById('settings-https-enable').checked;
+    const httpsPort = parseInt(document.getElementById('settings-https-port').value) || 443;
+    const autoCert = document.getElementById('settings-auto-cert').checked;
+    const certContent = document.getElementById('settings-cert-content').value;
+    const keyContent = document.getElementById('settings-key-content').value;
     const authEnabled = document.getElementById('settings-auth-enabled').checked;
     const authUsername = document.getElementById('settings-auth-username').value;
     const authPassword = document.getElementById('settings-auth-password').value;
@@ -149,8 +228,18 @@ async function saveSettings() {
     const mikrotikPassword = document.getElementById('settings-mikrotik-password').value;
     const mikrotikRoutingTable = document.getElementById('settings-mikrotik-routing-table').value;
 
+    // 验证HTTPS设置
+    if (httpsEnable && !autoCert && (!certContent || !keyContent)) {
+        showToast('请输入证书和私钥内容，或选择自动生成证书', 'warning');
+        return;
+    }
+
     const requestBody = {
+        device_name: deviceName,
         web_port: webPort,
+        https_enable: httpsEnable,
+        https_port: httpsPort,
+        auto_cert: autoCert,
         auth_enabled: authEnabled,
         auth_username: authUsername,
         health_check_enabled: healthEnabled,
@@ -168,6 +257,11 @@ async function saveSettings() {
 
     if (mikrotikPassword) {
         requestBody.mikrotik_password = mikrotikPassword;
+    }
+
+    if (httpsEnable && !autoCert && certContent && keyContent) {
+        requestBody.cert_content = certContent;
+        requestBody.key_content = keyContent;
     }
 
     try {

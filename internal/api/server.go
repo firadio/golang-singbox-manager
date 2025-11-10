@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/firadio/golang-singbox-manager/internal/api/handlers"
 	"github.com/firadio/golang-singbox-manager/internal/api/middleware"
@@ -23,6 +24,7 @@ type Server struct {
 	portMappingHandler *handlers.PortMappingHandler
 	pageHandler        *handlers.PageHandler
 	config             *config.Config
+	configPath         string
 	host               string
 	port               int
 }
@@ -63,6 +65,7 @@ func NewServer(cfg *config.Config, configPath string, sbManager *singbox.Manager
 		portMappingHandler: handlers.NewPortMappingHandler(mtClient),
 		pageHandler:        handlers.NewPageHandler(),
 		config:             cfg,
+		configPath:         configPath,
 		host:               cfg.Server.Host,
 		port:               cfg.Server.Port,
 	}
@@ -183,7 +186,36 @@ func (s *Server) setupRoutes() {
 
 // Start 启动服务器
 func (s *Server) Start() error {
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
-	log.Infof("Starting API server on %s", addr)
-	return s.router.Run(addr)
+	// 启动 HTTP 服务器
+	httpAddr := fmt.Sprintf("%s:%d", s.host, s.port)
+	log.Infof("Starting API server on %s", httpAddr)
+
+	// 如果启用HTTPS，同时启动HTTPS服务器
+	if s.config.Server.HTTPSEnable {
+		httpsAddr := fmt.Sprintf("%s:%d", s.host, s.config.Server.HTTPSPort)
+
+		// 获取证书文件路径（使用与settings.go相同的计算方式）
+		certFile := s.config.Server.CertFile
+		keyFile := s.config.Server.KeyFile
+		if !filepath.IsAbs(certFile) {
+			certFile = filepath.Join(filepath.Dir(s.configPath), certFile)
+		}
+		if !filepath.IsAbs(keyFile) {
+			keyFile = filepath.Join(filepath.Dir(s.configPath), keyFile)
+		}
+
+		log.Infof("Starting HTTPS server on %s", httpsAddr)
+		log.Infof("Using certificate file: %s", certFile)
+		log.Infof("Using key file: %s", keyFile)
+
+		// 在goroutine中启动HTTPS服务器
+		go func() {
+			if err := s.router.RunTLS(httpsAddr, certFile, keyFile); err != nil {
+				log.Errorf("HTTPS server error: %v", err)
+			}
+		}()
+	}
+
+	// 启动HTTP服务器（主线程）
+	return s.router.Run(httpAddr)
 }

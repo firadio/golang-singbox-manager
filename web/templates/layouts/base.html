@@ -4,14 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}} - Sing-Box Manager</title>
+    <title id="page-title">{{.Title}} - Sing-Box Manager</title>
     <link rel="stylesheet" href="/static/css/common.css">
 </head>
 <body>
     <!-- 导航栏 -->
     <nav>
         <div class="nav-container">
-            <div class="nav-brand">🚀 Sing-Box Manager</div>
+            <div class="nav-brand" id="nav-brand">🚀 Sing-Box Manager</div>
             <ul class="nav-menu">
                 <li><a href="/nodes" {{if eq .CurrentPage "nodes"}}class="active"{{end}}>代理节点</a></li>
                 <li><a href="/rules" {{if eq .CurrentPage "rules"}}class="active"{{end}}>路由规则</a></li>
@@ -64,6 +64,20 @@
                 const navUser = document.getElementById('nav-user');
                 const usernameEl = document.getElementById('nav-username');
                 const logoutBtn = document.getElementById('logout-btn');
+
+                // 更新设备名称
+                if (authConfigData.code === 0 && authConfigData.data && authConfigData.data.device_name) {
+                    const deviceName = authConfigData.data.device_name;
+                    const pageTitle = document.getElementById('page-title');
+                    const navBrand = document.getElementById('nav-brand');
+
+                    // 更新页面标题（保留当前页面名称）
+                    const currentTitle = pageTitle.textContent.split(' - ')[0];
+                    pageTitle.textContent = `${currentTitle} - ${deviceName}`;
+
+                    // 更新导航栏品牌名称
+                    navBrand.textContent = `🚀 ${deviceName}`;
+                }
 
                 // 如果认证功能未开启，隐藏整个用户区域
                 if (authConfigData.code === 0 && authConfigData.data && !authConfigData.data.auth_enabled) {

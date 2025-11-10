@@ -500,6 +500,28 @@
 
             <!-- 配置 Tab -->
             <div id="viewer-config-tab" class="viewer-tab-content active">
+                <!-- 入站代理配置信息 -->
+                <div class="card" style="margin-bottom: 20px; background: #f8f9fa;">
+                    <h4 style="margin-bottom: 15px;">入站代理配置</h4>
+
+                    <div class="form-group">
+                        <label>HTTP 代理</label>
+                        <input type="text" id="proxy-http-config" readonly style="background: #fff; font-family: monospace; cursor: text;">
+                        <small>在浏览器或应用中配置HTTP代理使用此地址</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>SOCKS5 代理</label>
+                        <input type="text" id="proxy-socks5-config" readonly style="background: #fff; font-family: monospace; cursor: text;">
+                        <small>在应用中配置SOCKS5代理使用此地址</small>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <button class="btn btn-sm" onclick="copyProxyConfig('http')">复制 HTTP 配置</button>
+                        <button class="btn btn-sm" onclick="copyProxyConfig('socks5')">复制 SOCKS5 配置</button>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>配置文件路径</label>
                     <input type="text" id="config-file-path" readonly style="background: #f3f4f6;">
@@ -507,7 +529,7 @@
 
                 <div class="form-group">
                     <label>完整配置 (JSON)</label>
-                    <textarea id="config-content" readonly style="min-height: 500px; font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 15px;"></textarea>
+                    <textarea id="config-content" readonly style="min-height: 400px; font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 15px;"></textarea>
                 </div>
             </div>
 
@@ -1121,6 +1143,18 @@ async function loadDetourOptions(currentNodeId = null) {
     }
 }
 
+// 翻译节点状态
+function translateStatus(status) {
+    const statusMap = {
+        'running': '运行中',
+        'stopped': '已停止',
+        'error': '错误',
+        'starting': '启动中',
+        'stopping': '停止中'
+    };
+    return statusMap[status] || status;
+}
+
 // 加载节点列表
 async function loadNodes() {
     const tbody = document.getElementById('nodes-tbody');
@@ -1214,7 +1248,7 @@ async function loadNodes() {
                 <td>${node.tun_name || '-'}</td>
                 <td><code>${node.table_id}</code></td>
                 <td>${latencyHtml}</td>
-                <td><span class="status status-${node.status}">${node.status}</span></td>
+                <td><span class="status status-${node.status}">${translateStatus(node.status)}</span></td>
                 <td>
                     <div class="actions">
                         ${node.status === 'running'
@@ -1248,7 +1282,6 @@ async function showCreateNodeModal() {
     // 重置模式为表单模式
     switchConfigMode('form');
     updateNodeTypeFields();
-    updateInboundFields(); // 重置入站字段显示
 
     // 加载中转节点选项
     await loadDetourOptions();
@@ -1777,6 +1810,9 @@ async function loadNodeConfig(nodeId) {
             document.getElementById('config-file-path').value = data.data.path;
             const configContent = JSON.parse(data.data.content);
             document.getElementById('config-content').value = JSON.stringify(configContent, null, 2);
+
+            // 提取入站代理配置信息
+            extractProxyConfig(configContent);
         } else {
             showToast('获取节点配置失败: ' + (data.message || '未知错误'), 'error');
         }
@@ -1784,6 +1820,46 @@ async function loadNodeConfig(nodeId) {
         console.error('查看节点配置失败:', e);
         showToast('获取节点配置失败', 'error');
     }
+}
+
+// 提取代理配置信息
+function extractProxyConfig(config) {
+    const hostname = window.location.hostname || 'localhost';
+    let httpPort = null;
+    let socksPort = null;
+
+    // 从inbounds中提取HTTP和SOCKS5端口
+    if (config.inbounds && Array.isArray(config.inbounds)) {
+        config.inbounds.forEach(inbound => {
+            if (inbound.type === 'http' && inbound.listen_port) {
+                httpPort = inbound.listen_port;
+            } else if (inbound.type === 'socks' && inbound.listen_port) {
+                socksPort = inbound.listen_port;
+            }
+        });
+    }
+
+    // 显示代理配置
+    const httpConfig = httpPort ? `${hostname}:${httpPort}` : '未配置 HTTP 代理';
+    const socksConfig = socksPort ? `${hostname}:${socksPort}` : '未配置 SOCKS5 代理';
+
+    document.getElementById('proxy-http-config').value = httpConfig;
+    document.getElementById('proxy-socks5-config').value = socksConfig;
+}
+
+// 复制代理配置
+function copyProxyConfig(type) {
+    const elementId = type === 'http' ? 'proxy-http-config' : 'proxy-socks5-config';
+    const input = document.getElementById(elementId);
+
+    if (input.value.includes('未配置')) {
+        showToast('该代理类型未配置', 'warning');
+        return;
+    }
+
+    input.select();
+    document.execCommand('copy');
+    showToast(`已复制 ${type.toUpperCase()} 代理配置到剪贴板`, 'success');
 }
 
 // 加载日志

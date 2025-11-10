@@ -203,3 +203,16 @@ func GetNextAvailablePriority() (int, error) {
 
 	return nextPriority, nil
 }
+
+// CheckSourceIPExists 检查源IP是否已存在（排除指定ID）
+func CheckSourceIPExists(sourceIP string, excludeID int) (bool, error) {
+	query := `SELECT COUNT(*) FROM routing_rules WHERE source_ip = ? AND id != ?`
+
+	var count int
+	err := db.QueryRow(query, sourceIP, excludeID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check source IP: %w", err)
+	}
+
+	return count > 0, nil
+}

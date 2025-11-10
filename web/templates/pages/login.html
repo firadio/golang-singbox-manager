@@ -4,13 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}} - Sing-Box Manager</title>
+    <title id="page-title">{{.Title}} - Sing-Box Manager</title>
     <link rel="stylesheet" href="/static/css/common.css">
 </head>
 <body>
     <div class="login-container">
         <div class="login-box">
-            <h1>🚀 Sing-Box Manager</h1>
+            <h1 id="login-title">🚀 Sing-Box Manager</h1>
             <form id="loginForm" onsubmit="handleLogin(event)">
                 <div class="form-group" id="usernameGroup">
                     <label for="username">用户名</label>
@@ -36,6 +36,20 @@
                 const data = await response.json();
 
                 if (data.code === 0 && data.data) {
+                    // 更新设备名称
+                    if (data.data.device_name) {
+                        const deviceName = data.data.device_name;
+                        const pageTitle = document.getElementById('page-title');
+                        const loginTitle = document.getElementById('login-title');
+
+                        // 更新页面标题
+                        const currentTitle = pageTitle.textContent.split(' - ')[0];
+                        pageTitle.textContent = `${currentTitle} - ${deviceName}`;
+
+                        // 更新登录框标题
+                        loginTitle.textContent = `🚀 ${deviceName}`;
+                    }
+
                     // 如果没有设置用户名，隐藏用户名字段
                     usernameRequired = data.data.username_required || false;
 

@@ -59,6 +59,18 @@ func (h *RuleHandler) CreateRule(c *gin.Context) {
 		return
 	}
 
+	// 检查源IP是否已存在
+	exists, err := storage.CheckSourceIPExists(rule.SourceIP, 0)
+	if err != nil {
+		log.Errorf("Failed to check source IP: %v", err)
+		Error(c, 2013, "Failed to validate source IP")
+		return
+	}
+	if exists {
+		Error(c, 2014, "Source IP already exists")
+		return
+	}
+
 	// 自动分配优先级
 	if rule.Priority == 0 {
 		priority, err := storage.GetNextAvailablePriority()
@@ -112,6 +124,18 @@ func (h *RuleHandler) UpdateRule(c *gin.Context) {
 	var updateData storage.RoutingRule
 	if err := c.ShouldBindJSON(&updateData); err != nil {
 		Error(c, 2004, "Invalid request body")
+		return
+	}
+
+	// 检查源IP是否已存在（排除当前规则自己）
+	exists, err := storage.CheckSourceIPExists(updateData.SourceIP, id)
+	if err != nil {
+		log.Errorf("Failed to check source IP: %v", err)
+		Error(c, 2013, "Failed to validate source IP")
+		return
+	}
+	if exists {
+		Error(c, 2014, "Source IP already exists")
 		return
 	}
 
