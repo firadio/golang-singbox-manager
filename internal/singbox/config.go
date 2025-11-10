@@ -70,15 +70,37 @@ func GenerateConfig(node *storage.ProxyNode, detourNode *storage.ProxyNode) (str
 	// 构建 outbounds 列表
 	outbounds := []interface{}{nodeOutbound}
 
-	// 如果有 detour 中转节点，添加到 outbounds
-	if detourNode != nil {
+	// 递归获取所有中转节点链
+	currentDetour := detourNode
+	visited := make(map[int]bool) // 防止循环引用
+	visited[node.ID] = true
+
+	for currentDetour != nil {
+		// 防止循环引用
+		if visited[currentDetour.ID] {
+			return "", fmt.Errorf("circular detour reference detected for node %d", currentDetour.ID)
+		}
+		visited[currentDetour.ID] = true
+
+		// 解析中转节点配置
 		var detourOutbound map[string]interface{}
-		if err := json.Unmarshal([]byte(detourNode.Config), &detourOutbound); err != nil {
+		if err := json.Unmarshal([]byte(currentDetour.Config), &detourOutbound); err != nil {
 			return "", fmt.Errorf("failed to parse detour config: %w", err)
 		}
-		detourTag := fmt.Sprintf("node-%d", detourNode.ID)
+		detourTag := fmt.Sprintf("node-%d", currentDetour.ID)
 		detourOutbound["tag"] = detourTag
 		outbounds = append(outbounds, detourOutbound)
+
+		// 获取下一层中转节点
+		if currentDetour.DetourID != nil {
+			nextDetour, err := storage.GetNode(*currentDetour.DetourID)
+			if err != nil {
+				return "", fmt.Errorf("failed to get detour node %d: %w", *currentDetour.DetourID, err)
+			}
+			currentDetour = nextDetour
+		} else {
+			currentDetour = nil
+		}
 	}
 
 	// 构建完整配置
