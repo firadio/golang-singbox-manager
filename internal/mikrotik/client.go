@@ -535,24 +535,37 @@ func (c *Client) GetAddresses() ([]Address, error) {
 		return nil, fmt.Errorf("Mikrotik is not enabled")
 	}
 
-	items, err := c.runCommand("/ip/address/print", map[string]string{
-		"?dynamic": "true",
-	})
+	// 获取所有地址，然后过滤动态地址
+	items, err := c.runCommand("/ip/address/print", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get addresses: %w", err)
 	}
 
 	var addresses []Address
 	for _, item := range items {
-		address := Address{
-			Interface: item["interface"],
-			Address:   item["address"],
-			Dynamic:   item["dynamic"] == "true",
+		// 检查是否为动态地址（通过 dynamic 字段或 disabled 字段判断）
+		isDynamic := item["dynamic"] == "true"
+
+		// Mikrotik API 返回的动态地址可能通过不同字段标识
+		// 有些版本使用 dynamic=true，有些使用其他方式
+		// 如果没有 dynamic 字段，但有 network 字段，也可能是动态地址
+		if !isDynamic && item["network"] != "" && item["interface"] != "" {
+			// 动态地址通常有 network 字段
+			isDynamic = true
 		}
-		addresses = append(addresses, address)
+
+		if isDynamic {
+			address := Address{
+				Interface: item["interface"],
+				Address:   item["address"],
+				Dynamic:   true,
+			}
+			addresses = append(addresses, address)
+			log.Debugf("Mikrotik IPv4 address: interface=%s, address=%s, network=%s", item["interface"], item["address"], item["network"])
+		}
 	}
 
-	log.Infof("Retrieved %d dynamic IPv4 addresses from Mikrotik", len(addresses))
+	log.Infof("Retrieved %d dynamic IPv4 addresses from Mikrotik (total: %d)", len(addresses), len(items))
 	return addresses, nil
 }
 

@@ -318,7 +318,7 @@ func (h *DDNSHandler) GetMikrotikInterfaces(c *gin.Context) {
 
 	// 提取动态接口列表
 	interfaceMap := make(map[string]bool)
-	var interfaces []gin.H
+	interfaces := []gin.H{} // 初始化为空数组，避免返回 null
 	for _, addr := range addresses {
 		if addr.Dynamic && !interfaceMap[addr.Interface] {
 			interfaceMap[addr.Interface] = true
