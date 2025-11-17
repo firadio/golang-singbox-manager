@@ -17,6 +17,7 @@ data/*.db-shm
 data/*.db-wal
 
 # Log files
+logs/
 logs/*.log
 logs/**/*.log
 
@@ -38,6 +39,7 @@ Thumbs.db
 # Config files with sensitive data (keep template)
 configs/config.yaml
 configs/singbox/*.json
+configs/certs/
 
 # Go workspace file
 go.work
