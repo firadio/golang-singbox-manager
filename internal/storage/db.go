@@ -130,6 +130,29 @@ func migrate() error {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 
+		// 创建DDNS配置表
+		`CREATE TABLE IF NOT EXISTS ddns_records (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			provider TEXT NOT NULL DEFAULT 'cloudflare',
+			api_token TEXT NOT NULL,
+			zone_id TEXT NOT NULL,
+			zone_name TEXT NOT NULL,
+			record_name TEXT NOT NULL,
+			record_type TEXT NOT NULL DEFAULT 'A',
+			dns_record_id TEXT,
+			ip_source TEXT NOT NULL DEFAULT 'public',
+			ip_detect_url TEXT DEFAULT 'https://api.ip.sb/ip',
+			mikrotik_interface TEXT,
+			current_ip TEXT,
+			last_ip TEXT,
+			last_update DATETIME,
+			enabled BOOLEAN DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(zone_id, record_name, record_type, dns_record_id)
+		)`,
+
 		// 创建索引
 		`CREATE INDEX IF NOT EXISTS idx_routing_rules_node_id ON routing_rules(node_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_routing_rules_enabled ON routing_rules(enabled)`,
@@ -173,6 +196,15 @@ func addColumnsIfNotExist() error {
 		{"hijack_dns", "BOOLEAN DEFAULT 1", "1"},
 	}
 
+	// 添加 DDNS 表的新列
+	ddnsColumns := []struct {
+		table      string
+		name       string
+		definition string
+	}{
+		{"ddns_records", "ip_detect_url", "TEXT DEFAULT 'https://api.ip.sb/ip'"},
+	}
+
 	// 获取现有列
 	rows, err := db.Query("PRAGMA table_info(proxy_nodes)")
 	if err != nil {
@@ -200,6 +232,38 @@ func addColumnsIfNotExist() error {
 				return fmt.Errorf("failed to add column %s: %w", col.name, err)
 			}
 			log.Infof("Added column %s to proxy_nodes table", col.name)
+		}
+	}
+
+	// 为 DDNS 表添加新列
+	for _, col := range ddnsColumns {
+		// 检查列是否存在
+		rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", col.table))
+		if err != nil {
+			continue // 表可能不存在，跳过
+		}
+
+		existingCols := make(map[string]bool)
+		for rows.Next() {
+			var cid int
+			var name, colType string
+			var notNull, pk int
+			var dfltValue sql.NullString
+			if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+				rows.Close()
+				continue
+			}
+			existingCols[name] = true
+		}
+		rows.Close()
+
+		if !existingCols[col.name] {
+			alterSQL := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", col.table, col.name, col.definition)
+			if _, err := db.Exec(alterSQL); err != nil {
+				log.Warnf("Failed to add column %s to %s: %v", col.name, col.table, err)
+			} else {
+				log.Infof("Added column %s to %s table", col.name, col.table)
+			}
 		}
 	}
 

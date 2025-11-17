@@ -521,3 +521,67 @@ func (c *Client) TestConnection() error {
 
 	return nil
 }
+
+// Address IP地址信息
+type Address struct {
+	Interface string
+	Address   string
+	Dynamic   bool
+}
+
+// GetAddresses 获取所有 IPv4 地址
+func (c *Client) GetAddresses() ([]Address, error) {
+	if !c.config.Enabled {
+		return nil, fmt.Errorf("Mikrotik is not enabled")
+	}
+
+	items, err := c.runCommand("/ip/address/print", map[string]string{
+		"?dynamic": "true",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get addresses: %w", err)
+	}
+
+	var addresses []Address
+	for _, item := range items {
+		address := Address{
+			Interface: item["interface"],
+			Address:   item["address"],
+			Dynamic:   item["dynamic"] == "true",
+		}
+		addresses = append(addresses, address)
+	}
+
+	log.Infof("Retrieved %d dynamic IPv4 addresses from Mikrotik", len(addresses))
+	return addresses, nil
+}
+
+// GetIPv6Addresses 获取所有 IPv6 地址
+func (c *Client) GetIPv6Addresses() ([]Address, error) {
+	if !c.config.Enabled {
+		return nil, fmt.Errorf("Mikrotik is not enabled")
+	}
+
+	// 先尝试获取所有 IPv6 地址（不过滤 dynamic）
+	items, err := c.runCommand("/ipv6/address/print", nil)
+	if err != nil {
+		log.Warnf("Failed to get all IPv6 addresses: %v", err)
+		return []Address{}, nil // 返回空列表而不是错误
+	}
+
+	var addresses []Address
+	for _, item := range items {
+		// 只添加动态地址
+		if item["dynamic"] == "true" {
+			address := Address{
+				Interface: item["interface"],
+				Address:   item["address"],
+				Dynamic:   true,
+			}
+			addresses = append(addresses, address)
+		}
+	}
+
+	log.Infof("Retrieved %d dynamic IPv6 addresses from Mikrotik (total: %d)", len(addresses), len(items))
+	return addresses, nil
+}

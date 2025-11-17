@@ -22,6 +22,7 @@ type Server struct {
 	settingsHandler    *handlers.SettingsHandler
 	logHandler         *handlers.LogHandler
 	portMappingHandler *handlers.PortMappingHandler
+	ddnsHandler        *handlers.DDNSHandler
 	pageHandler        *handlers.PageHandler
 	config             *config.Config
 	configPath         string
@@ -63,6 +64,7 @@ func NewServer(cfg *config.Config, configPath string, sbManager *singbox.Manager
 		settingsHandler:    handlers.NewSettingsHandler(cfg, configPath, mtClient),
 		logHandler:         handlers.NewLogHandler(cfg.SingBox.LogDir),
 		portMappingHandler: handlers.NewPortMappingHandler(mtClient),
+		ddnsHandler:        handlers.NewDDNSHandler(mtClient),
 		pageHandler:        handlers.NewPageHandler(),
 		config:             cfg,
 		configPath:         configPath,
@@ -140,6 +142,23 @@ func (s *Server) setupRoutes() {
 		portMappings.POST("/sync", s.portMappingHandler.SyncPortMappings)
 	}
 
+	// DDNS API
+	ddns := api.Group("/ddns")
+	{
+		ddns.GET("", s.ddnsHandler.GetAllDDNSRecords)
+		ddns.GET("/:id", s.ddnsHandler.GetDDNSRecord)
+		ddns.POST("", s.ddnsHandler.CreateDDNSRecord)
+		ddns.PUT("/:id", s.ddnsHandler.UpdateDDNSRecord)
+		ddns.DELETE("/:id", s.ddnsHandler.DeleteDDNSRecord)
+		ddns.POST("/:id/enable", s.ddnsHandler.EnableDDNSRecord)
+		ddns.POST("/:id/disable", s.ddnsHandler.DisableDDNSRecord)
+		ddns.POST("/:id/update", s.ddnsHandler.UpdateDDNS)
+		ddns.GET("/test-public-ip", s.ddnsHandler.TestPublicIP)
+		ddns.GET("/cloudflare/zones", s.ddnsHandler.GetCloudflareZones)
+		ddns.GET("/cloudflare/records", s.ddnsHandler.GetCloudflareDNSRecords)
+		ddns.GET("/mikrotik/interfaces", s.ddnsHandler.GetMikrotikInterfaces)
+	}
+
 	// 系统设置 API
 	settings := api.Group("/settings")
 	{
@@ -169,6 +188,7 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/nodes", s.pageHandler.RenderNodes)
 	s.router.GET("/rules", s.pageHandler.RenderRules)
 	s.router.GET("/port-mappings", s.pageHandler.RenderPortMappings)
+	s.router.GET("/ddns", s.pageHandler.RenderDDNS)
 	s.router.GET("/settings", s.pageHandler.RenderSettings)
 
 	// 根路径重定向

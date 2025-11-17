@@ -10,6 +10,7 @@ import (
 
 	"github.com/firadio/golang-singbox-manager/internal/api"
 	"github.com/firadio/golang-singbox-manager/internal/config"
+	"github.com/firadio/golang-singbox-manager/internal/ddns"
 	"github.com/firadio/golang-singbox-manager/internal/health"
 	"github.com/firadio/golang-singbox-manager/internal/mikrotik"
 	"github.com/firadio/golang-singbox-manager/internal/network"
@@ -105,6 +106,12 @@ func main() {
 	healthChecker := health.NewChecker(30 * time.Second)
 	healthChecker.Start()
 	defer healthChecker.Stop()
+
+	// 启动 DDNS 自动更新器
+	log.Info("Starting DDNS updater...")
+	ddnsUpdater := ddns.NewUpdater(mtClient, 30*time.Second)
+	ddnsUpdater.Start()
+	defer ddnsUpdater.Stop()
 
 	// 启动 API 服务器
 	log.Info("Starting API server...")

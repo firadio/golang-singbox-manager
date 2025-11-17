@@ -57,6 +57,18 @@ func (h *PageHandler) RenderRules(c *gin.Context) {
 	})
 }
 
+// RenderDDNS 渲染 DDNS 页面
+func (h *PageHandler) RenderDDNS(c *gin.Context) {
+	c.HTML(200, "ddns-page", gin.H{
+		"Title":       "动态域名",
+		"CurrentPage": "ddns",
+		"PageTitle":   "动态域名管理",
+		"PageActions": []PageAction{
+			{Text: "+ 创建 DDNS", Class: "btn btn-primary", OnClick: template.JS("showCreateDDNSModal()")},
+		},
+	})
+}
+
 // RenderSettings 渲染系统设置页面
 func (h *PageHandler) RenderSettings(c *gin.Context) {
 	c.HTML(200, "settings-page", gin.H{

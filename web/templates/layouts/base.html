@@ -16,6 +16,7 @@
                 <li><a href="/nodes" {{if eq .CurrentPage "nodes"}}class="active"{{end}}>代理节点</a></li>
                 <li><a href="/rules" {{if eq .CurrentPage "rules"}}class="active"{{end}}>路由规则</a></li>
                 <li><a href="/port-mappings" {{if eq .CurrentPage "port-mappings"}}class="active"{{end}}>端口映射</a></li>
+                <li><a href="/ddns" {{if eq .CurrentPage "ddns"}}class="active"{{end}}>动态域名</a></li>
                 <li><a href="/settings" {{if eq .CurrentPage "settings"}}class="active"{{end}}>系统设置</a></li>
             </ul>
             <div class="nav-user" id="nav-user">
@@ -46,6 +47,8 @@
             {{template "nodes-content" .}}
         {{else if eq .CurrentPage "rules"}}
             {{template "rules-content" .}}
+        {{else if eq .CurrentPage "ddns"}}
+            {{template "ddns-content" .}}
         {{else if eq .CurrentPage "settings"}}
             {{template "settings-content" .}}
         {{end}}
