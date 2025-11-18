@@ -86,10 +86,13 @@ func (h *PortMappingHandler) CreatePortMapping(c *gin.Context) {
 		return
 	}
 
-	// 如果启用，同步到 MikroTik
+	// 如果启用，同步到 MikroTik（使用增量同步，只操作这一条映射的规则）
+	// 优化说明：使用 SyncSinglePortMapping 而不是 SyncPortMappings
+	// - 效率更高：只操作这一条映射，不影响其他映射
+	// - 避免冲突：减少与其他操作的锁竞争时间
 	if mapping.Enabled && h.mtClient != nil {
-		if err := h.mtClient.SyncPortMappings(); err != nil {
-			log.Errorf("Failed to sync port mappings to MikroTik: %v", err)
+		if err := h.mtClient.SyncSinglePortMapping(&mapping); err != nil {
+			log.Errorf("Failed to sync port mapping to MikroTik: %v", err)
 			// 不返回错误，因为数据库已创建成功
 		}
 	}
@@ -126,6 +129,7 @@ func (h *PortMappingHandler) UpdatePortMapping(c *gin.Context) {
 	existing.DstPort = updateData.DstPort
 	existing.ToAddress = updateData.ToAddress
 	existing.ToPort = updateData.ToPort
+	existing.EnableMasquerade = updateData.EnableMasquerade
 	existing.Enabled = updateData.Enabled
 
 	// 验证字段
@@ -153,10 +157,11 @@ func (h *PortMappingHandler) UpdatePortMapping(c *gin.Context) {
 		return
 	}
 
-	// 同步到 MikroTik
+	// 同步到 MikroTik（使用增量同步，只更新这一条映射）
+	// 执行：删除旧规则 → 添加新规则（配置可能已修改）
 	if h.mtClient != nil {
-		if err := h.mtClient.SyncPortMappings(); err != nil {
-			log.Errorf("Failed to sync port mappings to MikroTik: %v", err)
+		if err := h.mtClient.SyncSinglePortMapping(existing); err != nil {
+			log.Errorf("Failed to sync port mapping to MikroTik: %v", err)
 		}
 	}
 
@@ -172,18 +177,19 @@ func (h *PortMappingHandler) DeletePortMapping(c *gin.Context) {
 		return
 	}
 
-	// 删除
+	// 先删除 MikroTik 上的规则（删除数据库记录之前）
+	// 顺序重要：先删规则再删数据库，确保即使数据库删除失败，规则也不会成为孤立规则
+	if h.mtClient != nil {
+		if err := h.mtClient.DeletePortMappingRules(id); err != nil {
+			log.Errorf("Failed to delete port mapping rules from MikroTik: %v", err)
+		}
+	}
+
+	// 删除数据库记录
 	if err := storage.DeletePortMapping(id); err != nil {
 		log.Errorf("Failed to delete port mapping: %v", err)
 		Error(c, 3010, "Failed to delete port mapping")
 		return
-	}
-
-	// 同步到 MikroTik（删除相关规则）
-	if h.mtClient != nil {
-		if err := h.mtClient.SyncPortMappings(); err != nil {
-			log.Errorf("Failed to sync port mappings to MikroTik: %v", err)
-		}
 	}
 
 	log.Infof("Port mapping deleted: ID %d", id)
@@ -212,10 +218,11 @@ func (h *PortMappingHandler) EnablePortMapping(c *gin.Context) {
 		return
 	}
 
-	// 同步到 MikroTik
+	// 同步到 MikroTik（启用映射：添加 NAT 规则）
+	// 执行：添加2条 dstnat 规则 + 可选的1条 masquerade 规则
 	if h.mtClient != nil {
-		if err := h.mtClient.SyncPortMappings(); err != nil {
-			log.Errorf("Failed to sync port mappings to MikroTik: %v", err)
+		if err := h.mtClient.SyncSinglePortMapping(mapping); err != nil {
+			log.Errorf("Failed to sync port mapping to MikroTik: %v", err)
 		}
 	}
 
@@ -238,18 +245,20 @@ func (h *PortMappingHandler) DisablePortMapping(c *gin.Context) {
 		return
 	}
 
+	// 先删除 MikroTik 上的规则（禁用映射：删除所有 NAT 规则）
+	// 执行：删除该映射的所有规则（2条 dstnat + 可选的1条 masquerade）
+	if h.mtClient != nil {
+		if err := h.mtClient.DeletePortMappingRules(id); err != nil {
+			log.Errorf("Failed to delete port mapping rules from MikroTik: %v", err)
+		}
+	}
+
+	// 更新数据库状态为禁用
 	mapping.Enabled = false
 	if err := storage.UpdatePortMapping(mapping); err != nil {
 		log.Errorf("Failed to disable port mapping: %v", err)
 		Error(c, 3012, "Failed to disable port mapping")
 		return
-	}
-
-	// 同步到 MikroTik（删除规则）
-	if h.mtClient != nil {
-		if err := h.mtClient.SyncPortMappings(); err != nil {
-			log.Errorf("Failed to sync port mappings to MikroTik: %v", err)
-		}
 	}
 
 	log.Infof("Port mapping disabled: ID %d", id)

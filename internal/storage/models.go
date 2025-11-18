@@ -62,13 +62,14 @@ type OperationLog struct {
 
 // PortMapping 端口映射模型
 type PortMapping struct {
-	ID        int       `json:"id" db:"id"`
-	Name      string    `json:"name" db:"name"`
-	Protocol  string    `json:"protocol" db:"protocol"` // tcp/udp
-	DstPort   int       `json:"dst_port" db:"dst_port"`
-	ToAddress string    `json:"to_address" db:"to_address"`
-	ToPort    int       `json:"to_port" db:"to_port"`
-	Enabled   bool      `json:"enabled" db:"enabled"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	ID               int       `json:"id" db:"id"`
+	Name             string    `json:"name" db:"name"`
+	Protocol         string    `json:"protocol" db:"protocol"` // tcp/udp
+	DstPort          int       `json:"dst_port" db:"dst_port"`
+	ToAddress        string    `json:"to_address" db:"to_address"`
+	ToPort           int       `json:"to_port" db:"to_port"`
+	EnableMasquerade bool      `json:"enable_masquerade" db:"enable_masquerade"` // 启用路由器代理（masquerade）
+	Enabled          bool      `json:"enabled" db:"enabled"`
+	CreatedAt        time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 }

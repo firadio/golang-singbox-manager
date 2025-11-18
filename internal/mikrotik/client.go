@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/firadio/golang-singbox-manager/internal/config"
 	log "github.com/sirupsen/logrus"
@@ -15,9 +16,10 @@ import (
 
 // Client Mikrotik客户端
 type Client struct {
-	config *config.MikrotikConfig
-	conn   net.Conn
-	reader *bufio.Reader
+	config  *config.MikrotikConfig
+	conn    net.Conn
+	reader  *bufio.Reader
+	syncMux sync.Mutex // 防止并发同步冲突：当多个API请求同时触发同步时，避免规则被反复删除添加导致状态混乱
 }
 
 // NewClient 创建Mikrotik客户端

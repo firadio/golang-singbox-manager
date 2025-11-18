@@ -203,6 +203,7 @@ func addColumnsIfNotExist() error {
 		definition string
 	}{
 		{"ddns_records", "ip_detect_url", "TEXT DEFAULT 'https://api.ip.sb/ip'"},
+		{"port_mappings", "enable_masquerade", "BOOLEAN DEFAULT 0"},
 	}
 
 	// 获取现有列

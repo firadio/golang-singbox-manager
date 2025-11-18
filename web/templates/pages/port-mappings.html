@@ -65,6 +65,14 @@
                     <input type="number" id="port-mapping-to-port" required min="1" max="65535" placeholder="例如: 3389">
                     <small>内网目标端口号 (1-65535)</small>
                 </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group" style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="port-mapping-enable-masquerade">
+                        <label style="margin: 0;">启用路由器代理功能</label>
+                    </div>
+                    <small>为没有设置网关的内网主机启用SNAT（源地址转换），让流量通过路由器进行代理</small>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn" onclick="closeModal('createPortMappingModal')">取消</button>
@@ -147,6 +155,7 @@
                 document.getElementById('port-mapping-dst-port').value = mapping.dst_port;
                 document.getElementById('port-mapping-to-address').value = mapping.to_address;
                 document.getElementById('port-mapping-to-port').value = mapping.to_port;
+                document.getElementById('port-mapping-enable-masquerade').checked = mapping.enable_masquerade || false;
                 document.getElementById('createPortMappingModal').classList.add('active');
             } else {
                 showToast('获取端口映射失败', 'error');
@@ -169,6 +178,7 @@
             dst_port: parseInt(document.getElementById('port-mapping-dst-port').value),
             to_address: document.getElementById('port-mapping-to-address').value,
             to_port: parseInt(document.getElementById('port-mapping-to-port').value),
+            enable_masquerade: document.getElementById('port-mapping-enable-masquerade').checked,
             enabled: true
         };
 
