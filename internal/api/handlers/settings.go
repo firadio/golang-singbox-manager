@@ -48,6 +48,7 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 		"mikrotik_username":      h.config.Mikrotik.Username,
 		"mikrotik_port":          h.config.Mikrotik.Port,
 		"mikrotik_routing_table": h.config.Mikrotik.RoutingTable,
+		"ddns_update_interval":   h.config.DDNS.UpdateInterval,
 	}
 	Success(c, settings)
 }
@@ -71,6 +72,7 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 		MikrotikPassword      string `json:"mikrotik_password"`
 		MikrotikPort          int    `json:"mikrotik_port"`
 		MikrotikRoutingTable  string `json:"mikrotik_routing_table"`
+		DDNSUpdateInterval    int    `json:"ddns_update_interval"`
 	}
 
 	if err := c.ShouldBindJSON(&updateData); err != nil {
@@ -145,6 +147,9 @@ func (h *SettingsHandler) UpdateSettings(c *gin.Context) {
 	h.config.Mikrotik.Port = updateData.MikrotikPort
 	if updateData.MikrotikRoutingTable != "" {
 		h.config.Mikrotik.RoutingTable = updateData.MikrotikRoutingTable
+	}
+	if updateData.DDNSUpdateInterval > 0 {
+		h.config.DDNS.UpdateInterval = updateData.DDNSUpdateInterval
 	}
 
 	// 保存配置文件

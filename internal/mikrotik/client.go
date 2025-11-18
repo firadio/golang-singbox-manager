@@ -535,7 +535,7 @@ func (c *Client) GetAddresses() ([]Address, error) {
 		return nil, fmt.Errorf("Mikrotik is not enabled")
 	}
 
-	// 获取所有地址，然后过滤动态地址
+	// 获取所有地址
 	items, err := c.runCommand("/ip/address/print", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get addresses: %w", err)
@@ -543,25 +543,15 @@ func (c *Client) GetAddresses() ([]Address, error) {
 
 	var addresses []Address
 	for _, item := range items {
-		// 检查是否为动态地址（通过 dynamic 字段或 disabled 字段判断）
-		isDynamic := item["dynamic"] == "true"
-
-		// Mikrotik API 返回的动态地址可能通过不同字段标识
-		// 有些版本使用 dynamic=true，有些使用其他方式
-		// 如果没有 dynamic 字段，但有 network 字段，也可能是动态地址
-		if !isDynamic && item["network"] != "" && item["interface"] != "" {
-			// 动态地址通常有 network 字段
-			isDynamic = true
-		}
-
-		if isDynamic {
+		// 只返回动态地址（检查 dynamic 字段）
+		if item["dynamic"] == "true" {
 			address := Address{
 				Interface: item["interface"],
 				Address:   item["address"],
 				Dynamic:   true,
 			}
 			addresses = append(addresses, address)
-			log.Debugf("Mikrotik IPv4 address: interface=%s, address=%s, network=%s", item["interface"], item["address"], item["network"])
+			log.Debugf("Mikrotik IPv4 address: interface=%s, address=%s", item["interface"], item["address"])
 		}
 	}
 
@@ -575,16 +565,16 @@ func (c *Client) GetIPv6Addresses() ([]Address, error) {
 		return nil, fmt.Errorf("Mikrotik is not enabled")
 	}
 
-	// 先尝试获取所有 IPv6 地址（不过滤 dynamic）
+	// 获取所有 IPv6 地址
 	items, err := c.runCommand("/ipv6/address/print", nil)
 	if err != nil {
-		log.Warnf("Failed to get all IPv6 addresses: %v", err)
+		log.Warnf("Failed to get IPv6 addresses: %v", err)
 		return []Address{}, nil // 返回空列表而不是错误
 	}
 
 	var addresses []Address
 	for _, item := range items {
-		// 只添加动态地址
+		// 只返回动态地址（检查 dynamic 字段）
 		if item["dynamic"] == "true" {
 			address := Address{
 				Interface: item["interface"],
@@ -592,6 +582,7 @@ func (c *Client) GetIPv6Addresses() ([]Address, error) {
 				Dynamic:   true,
 			}
 			addresses = append(addresses, address)
+			log.Debugf("Mikrotik IPv6 address: interface=%s, address=%s", item["interface"], item["address"])
 		}
 	}
 

@@ -109,7 +109,8 @@ func main() {
 
 	// 启动 DDNS 自动更新器
 	log.Info("Starting DDNS updater...")
-	ddnsUpdater := ddns.NewUpdater(mtClient, 30*time.Second)
+	ddnsInterval := time.Duration(cfg.DDNS.UpdateInterval) * time.Second
+	ddnsUpdater := ddns.NewUpdater(mtClient, ddnsInterval)
 	ddnsUpdater.Start()
 	defer ddnsUpdater.Stop()
 

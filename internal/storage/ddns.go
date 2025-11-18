@@ -35,8 +35,8 @@ func CreateDDNSRecord(record *DDNSRecord) error {
 	query := `
 		INSERT INTO ddns_records (
 			name, provider, api_token, zone_id, zone_name, record_name, record_type,
-			dns_record_id, ip_source, ip_detect_url, mikrotik_interface, enabled, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			dns_record_id, ip_source, ip_detect_url, mikrotik_interface, current_ip, enabled, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 	`
 
 	result, err := db.Exec(
@@ -52,6 +52,7 @@ func CreateDDNSRecord(record *DDNSRecord) error {
 		record.IPSource,
 		record.IPDetectURL,
 		record.MikrotikInterface,
+		record.CurrentIP,
 		record.Enabled,
 	)
 	if err != nil {
@@ -208,7 +209,7 @@ func UpdateDDNSRecord(record *DDNSRecord) error {
 		UPDATE ddns_records
 		SET name = ?, provider = ?, api_token = ?, zone_id = ?, zone_name = ?,
 		    record_name = ?, record_type = ?, dns_record_id = ?, ip_source = ?, ip_detect_url = ?, mikrotik_interface = ?,
-		    enabled = ?, updated_at = CURRENT_TIMESTAMP
+		    current_ip = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`
 
@@ -225,6 +226,7 @@ func UpdateDDNSRecord(record *DDNSRecord) error {
 		record.IPSource,
 		record.IPDetectURL,
 		record.MikrotikInterface,
+		record.CurrentIP,
 		record.Enabled,
 		record.ID,
 	)

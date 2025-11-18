@@ -79,13 +79,16 @@ func (h *DDNSHandler) CreateDDNSRecord(c *gin.Context) {
 		return
 	}
 
+	// current_ip 由前端传入（前端加载 DNS 记录时已从 Cloudflare 获取）
+	log.Infof("Creating DDNS record: %s (current IP: %s)", record.Name, record.CurrentIP)
+
 	// 创建记录
 	if err := storage.CreateDDNSRecord(&record); err != nil {
 		Error(c, 7008, "Failed to create DDNS record: "+err.Error())
 		return
 	}
 
-	log.Infof("Created DDNS record: %s", record.Name)
+	log.Infof("Created DDNS record: %s (current IP: %s)", record.Name, record.CurrentIP)
 	Success(c, record)
 }
 
@@ -125,13 +128,16 @@ func (h *DDNSHandler) UpdateDDNSRecord(c *gin.Context) {
 		return
 	}
 
+	// current_ip 由前端传入（前端加载 DNS 记录时已从 Cloudflare 获取）
+	log.Infof("Updating DDNS record: %s (current IP: %s)", record.Name, record.CurrentIP)
+
 	// 更新记录
 	if err := storage.UpdateDDNSRecord(&record); err != nil {
 		Error(c, 7014, "Failed to update DDNS record: "+err.Error())
 		return
 	}
 
-	log.Infof("Updated DDNS record: %s", record.Name)
+	log.Infof("Updated DDNS record: %s (current IP: %s)", record.Name, record.CurrentIP)
 	Success(c, record)
 }
 

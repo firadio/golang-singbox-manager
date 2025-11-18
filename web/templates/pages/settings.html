@@ -133,6 +133,15 @@
 </div>
 
 <div class="card">
+    <h3>DDNS 设置</h3>
+    <div class="form-group">
+        <label>更新间隔（秒）</label>
+        <input type="number" id="settings-ddns-interval" placeholder="30" min="5" max="3600">
+        <small>DDNS 自动检测IP变化的间隔时间，建议范围：5-3600秒</small>
+    </div>
+</div>
+
+<div class="card">
     <div style="display: flex; gap: 10px;">
         <button class="btn btn-success" onclick="saveSettings()">保存设置</button>
         <button class="btn" onclick="loadSettings()">重新加载</button>
@@ -196,6 +205,7 @@ async function loadSettings() {
             document.getElementById('settings-mikrotik-port').value = settings.mikrotik_port || 8728;
             document.getElementById('settings-mikrotik-username').value = settings.mikrotik_username || 'admin';
             document.getElementById('settings-mikrotik-routing-table').value = settings.mikrotik_routing_table || 'main';
+            document.getElementById('settings-ddns-interval').value = settings.ddns_update_interval || 30;
 
             // 触发HTTPS设置显示/隐藏
             toggleHTTPSSettings();
@@ -227,6 +237,7 @@ async function saveSettings() {
     const mikrotikUsername = document.getElementById('settings-mikrotik-username').value;
     const mikrotikPassword = document.getElementById('settings-mikrotik-password').value;
     const mikrotikRoutingTable = document.getElementById('settings-mikrotik-routing-table').value;
+    const ddnsInterval = parseInt(document.getElementById('settings-ddns-interval').value) || 30;
 
     // 验证HTTPS设置
     if (httpsEnable && !autoCert && (!certContent || !keyContent)) {
@@ -248,7 +259,8 @@ async function saveSettings() {
         mikrotik_address: mikrotikAddress,
         mikrotik_port: mikrotikPort,
         mikrotik_username: mikrotikUsername,
-        mikrotik_routing_table: mikrotikRoutingTable
+        mikrotik_routing_table: mikrotikRoutingTable,
+        ddns_update_interval: ddnsInterval
     };
 
     if (authPassword) {

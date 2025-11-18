@@ -84,7 +84,7 @@
 
                 <div class="form-group">
                     <label for="ddns-record-name">DNS 记录</label>
-                    <select id="ddns-record-name" required size="8" style="height: auto;">
+                    <select id="ddns-record-name" required size="8" style="height: auto;" onchange="updateCurrentIPDisplay()">
                         <option value="">请先选择主域名</option>
                     </select>
                     <div style="margin-top: 5px;">
@@ -93,6 +93,12 @@
                         <span id="dns-records-status" style="margin-left: 10px; font-size: 0.9em; color: #666;"></span>
                     </div>
                     <small>从列表中选择要更新的 DNS 记录</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="ddns-current-ip">Cloudflare 当前 IP</label>
+                    <input type="text" id="ddns-current-ip" readonly placeholder="选择 DNS 记录后自动显示" style="background-color: #f5f5f5;">
+                    <small>该 DNS 记录在 Cloudflare 上的当前 IP 地址</small>
                 </div>
 
                 <div class="form-group">
@@ -212,6 +218,7 @@
         document.getElementById('ddns-id').value = '';
         document.getElementById('ddns-zone').innerHTML = '<option value="">请先加载域名列表</option>';
         document.getElementById('ddns-record-name').innerHTML = '<option value="">请先选择主域名</option>';
+        document.getElementById('ddns-current-ip').value = '';
         document.getElementById('token-status').style.display = 'none';
         cloudflareZones = [];
         toggleIPSourceOptions();
@@ -222,6 +229,17 @@
     window.onRecordTypeChange = function() {
         // 清空已加载的 DNS 记录列表
         document.getElementById('ddns-record-name').innerHTML = '<option value="">请先选择主域名</option>';
+        // 清空当前 IP 显示
+        document.getElementById('ddns-current-ip').value = '';
+    };
+
+    // 更新当前 IP 显示
+    window.updateCurrentIPDisplay = function() {
+        const recordSelect = document.getElementById('ddns-record-name');
+        const selectedOption = recordSelect.options[recordSelect.selectedIndex];
+        const currentIP = selectedOption.getAttribute('data-content') || '';
+
+        document.getElementById('ddns-current-ip').value = currentIP;
     };
 
     // 切换 IP 来源选项
@@ -476,7 +494,7 @@
 
                 const recordSelect = document.getElementById('ddns-record-name');
                 recordSelect.innerHTML = '<option value="">选择已有记录</option>' +
-                    records.map(record => `<option value="${record.name}" data-record-id="${record.id}">${record.name} (${record.content})</option>`).join('');
+                    records.map(record => `<option value="${record.name}" data-record-id="${record.id}" data-content="${record.content}">${record.name} (${record.content})</option>`).join('');
 
                 // 简化分页逻辑：如果返回的记录数等于 per_page，说明可能还有更多
                 dnsRecordsHasMore = records.length >= 20;
@@ -535,7 +553,7 @@
 
                 // 追加新记录到现有选项
                 const newOptions = records.map(record =>
-                    `<option value="${record.name}" data-record-id="${record.id}">${record.name} (${record.content})</option>`
+                    `<option value="${record.name}" data-record-id="${record.id}" data-content="${record.content}">${record.name} (${record.content})</option>`
                 ).join('');
                 recordSelect.insertAdjacentHTML('beforeend', newOptions);
 
@@ -612,6 +630,9 @@
                 document.getElementById('ddns-record-name').value = record.record_name;
                 document.getElementById('ddns-record-type').value = record.record_type;
                 document.getElementById('ddns-ip-source').value = record.ip_source;
+
+                // 显示当前 IP
+                document.getElementById('ddns-current-ip').value = record.current_ip || '';
 
                 // 加载区域选择
                 cloudflareZones = [{id: record.zone_id, name: record.zone_name}];
@@ -690,6 +711,7 @@
             record_type: document.getElementById('ddns-record-type').value,
             dns_record_id: dnsRecordId,
             ip_source: document.getElementById('ddns-ip-source').value,
+            current_ip: document.getElementById('ddns-current-ip').value || '',
             enabled: true
         };
 

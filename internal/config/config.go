@@ -16,6 +16,7 @@ type Config struct {
 	Logging  LoggingConfig  `yaml:"logging"`
 	Auth     AuthConfig     `yaml:"auth"`
 	Mikrotik MikrotikConfig `yaml:"mikrotik"`
+	DDNS     DDNSConfig     `yaml:"ddns"`
 }
 
 // ServerConfig HTTP 服务器配置
@@ -65,6 +66,11 @@ type MikrotikConfig struct {
 	RoutingTable string `yaml:"routing_table"` // 路由表名称
 }
 
+// DDNSConfig DDNS配置
+type DDNSConfig struct {
+	UpdateInterval int `yaml:"update_interval"` // 更新间隔（秒）
+}
+
 // DefaultConfig 默认配置
 func DefaultConfig() *Config {
 	return &Config{
@@ -101,6 +107,9 @@ func DefaultConfig() *Config {
 			Password:     "",
 			Port:         8728,
 			RoutingTable: "main",
+		},
+		DDNS: DDNSConfig{
+			UpdateInterval: 30, // 默认30秒
 		},
 	}
 }
