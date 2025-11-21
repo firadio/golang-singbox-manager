@@ -1357,6 +1357,9 @@ function isNormalNode(node) {
 function switchNodeTab(tab) {
     currentNodeTab = tab;
 
+    // 更新 URL hash（策略组为 #policy，普通节点为空）
+    window.location.hash = tab === 'policy' ? 'policy' : '';
+
     // 更新 Tab 按钮状态
     document.getElementById('normal-nodes-tab').classList.toggle('active', tab === 'normal');
     document.getElementById('policy-groups-tab').classList.toggle('active', tab === 'policy');
@@ -2809,6 +2812,20 @@ function escapeHtml(text) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // 从 URL hash 读取当前 Tab
+    const hash = window.location.hash.slice(1); // 去掉 #
+    const initialTab = hash === 'policy' ? 'policy' : 'normal';
+    switchNodeTab(initialTab);
+
+    // 监听 hash 变化（支持浏览器前进/后退按钮）
+    window.addEventListener('hashchange', function() {
+        const hash = window.location.hash.slice(1);
+        const tab = hash === 'policy' ? 'policy' : 'normal';
+        if (tab !== currentNodeTab) {
+            switchNodeTab(tab);
+        }
+    });
+
     loadNodes();
 
     // VLESS Reality切换
