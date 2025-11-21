@@ -1,6 +1,10 @@
 package storage
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 // ProxyNode 代理节点模型
 type ProxyNode struct {
@@ -72,4 +76,53 @@ type PortMapping struct {
 	Enabled          bool      `json:"enabled" db:"enabled"`
 	CreatedAt        time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// PolicyGroupConfig 策略组配置
+// 用于存储在 ProxyNode.Config 字段中（JSON格式）
+type PolicyGroupConfig struct {
+	Type                      string `json:"type"`                        // urltest/selector/fallback
+	Nodes                     []int  `json:"nodes"`                       // 成员节点ID列表
+	URL                       string `json:"url,omitempty"`               // 测试URL（urltest/fallback使用）
+	Interval                  string `json:"interval,omitempty"`          // 测试间隔（urltest/fallback使用）
+	Tolerance                 int    `json:"tolerance,omitempty"`         // 容差值ms（urltest使用）
+	Default                   int    `json:"default,omitempty"`           // 默认节点ID（selector使用）
+	InterruptExistConnections bool   `json:"interrupt_exist_connections"` // 切换时是否中断现有连接
+}
+
+// IsPolicyGroup 判断节点是否为策略组
+func (n *ProxyNode) IsPolicyGroup() bool {
+	return n.Type == "urltest" || n.Type == "selector" || n.Type == "fallback"
+}
+
+// IsNormalNode 判断节点是否为普通节点
+func (n *ProxyNode) IsNormalNode() bool {
+	return !n.IsPolicyGroup()
+}
+
+// GetPolicyGroupConfig 获取策略组配置
+// 如果节点不是策略组或配置解析失败，返回错误
+func (n *ProxyNode) GetPolicyGroupConfig() (*PolicyGroupConfig, error) {
+	if !n.IsPolicyGroup() {
+		return nil, fmt.Errorf("node %d is not a policy group", n.ID)
+	}
+
+	var config PolicyGroupConfig
+	if err := json.Unmarshal([]byte(n.Config), &config); err != nil {
+		return nil, fmt.Errorf("failed to parse policy group config: %w", err)
+	}
+
+	return &config, nil
+}
+
+// SetPolicyGroupConfig 设置策略组配置
+// 将 PolicyGroupConfig 序列化为 JSON 并存储到 Config 字段
+func (n *ProxyNode) SetPolicyGroupConfig(config *PolicyGroupConfig) error {
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal policy group config: %w", err)
+	}
+
+	n.Config = string(configJSON)
+	return nil
 }

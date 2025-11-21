@@ -32,20 +32,31 @@ func (m *Manager) StartNode(node *storage.ProxyNode) error {
 		return nil
 	}
 
-	// 获取 detour 节点（如果有）
-	var detourNode *storage.ProxyNode
-	if node.DetourID != nil {
-		var err error
-		detourNode, err = storage.GetNode(*node.DetourID)
-		if err != nil {
-			return fmt.Errorf("failed to get detour node: %w", err)
-		}
-	}
+	// 生成配置文件（根据节点类型选择不同的生成函数）
+	var configContent string
+	var err error
 
-	// 生成配置文件
-	configContent, err := GenerateConfig(node, detourNode)
-	if err != nil {
-		return fmt.Errorf("failed to generate config: %w", err)
+	if node.IsPolicyGroup() {
+		// 策略组：使用 GeneratePolicyGroupConfig
+		configContent, err = GeneratePolicyGroupConfig(node)
+		if err != nil {
+			return fmt.Errorf("failed to generate policy group config: %w", err)
+		}
+	} else {
+		// 普通节点：使用 GenerateConfig
+		// 获取 detour 节点（如果有）
+		var detourNode *storage.ProxyNode
+		if node.DetourID != nil {
+			detourNode, err = storage.GetNode(*node.DetourID)
+			if err != nil {
+				return fmt.Errorf("failed to get detour node: %w", err)
+			}
+		}
+
+		configContent, err = GenerateConfig(node, detourNode)
+		if err != nil {
+			return fmt.Errorf("failed to generate config: %w", err)
+		}
 	}
 
 	// 保存配置文件

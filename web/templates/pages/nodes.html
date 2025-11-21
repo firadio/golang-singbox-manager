@@ -1,12 +1,29 @@
 {{define "nodes-content"}}
-<!-- 节点列表 -->
-<div class="card">
-    <div id="nodes-loading" class="loading">
+<!-- Tab 切换按钮 -->
+<div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
+    <button class="tab-btn active" id="normal-nodes-tab" onclick="switchNodeTab('normal')">
+        普通节点
+    </button>
+    <button class="tab-btn" id="policy-groups-tab" onclick="switchNodeTab('policy')">
+        策略组
+    </button>
+    <div style="flex: 1;"></div>
+    <button class="btn btn-primary" id="create-normal-btn" onclick="showCreateNodeModal()">
+        + 创建节点
+    </button>
+    <button class="btn btn-primary" id="create-policy-btn" onclick="showCreatePolicyGroupModal()" style="display: none;">
+        + 创建策略组
+    </button>
+</div>
+
+<!-- 普通节点列表 -->
+<div class="card" id="normal-nodes-card">
+    <div id="normal-nodes-loading" class="loading">
         <div class="loading-spinner"></div>
         <div>加载中...</div>
     </div>
 
-    <table id="nodes-table" style="display: none;">
+    <table id="normal-nodes-table" style="display: none;">
         <thead>
             <tr>
                 <th>ID</th>
@@ -20,9 +37,173 @@
                 <th>操作</th>
             </tr>
         </thead>
-        <tbody id="nodes-tbody">
+        <tbody id="normal-nodes-tbody">
         </tbody>
     </table>
+</div>
+
+<!-- 策略组列表 -->
+<div class="card" id="policy-groups-card" style="display: none;">
+    <div id="policy-groups-loading" class="loading">
+        <div class="loading-spinner"></div>
+        <div>加载中...</div>
+    </div>
+
+    <table id="policy-groups-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>名称</th>
+                <th>类型</th>
+                <th>成员节点</th>
+                <th>网卡</th>
+                <th>路由表</th>
+                <th>延迟</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="policy-groups-tbody">
+        </tbody>
+    </table>
+</div>
+
+<style>
+.tab-btn {
+    padding: 10px 20px;
+    background: #f3f4f6;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+    color: #6b7280;
+}
+
+.tab-btn:hover {
+    background: #e5e7eb;
+}
+
+.tab-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+</style>
+
+<!-- 创建/编辑策略组模态框 -->
+<div id="createPolicyGroupModal" class="modal">
+    <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3 id="policy-modal-title">创建策略组</h3>
+            <button class="modal-close" onclick="closeModal('createPolicyGroupModal')">&times;</button>
+        </div>
+
+        <form onsubmit="savePolicyGroup(event)">
+            <div class="modal-body">
+                <input type="hidden" id="policy-id">
+
+                <!-- 策略组名称 -->
+                <div class="form-group">
+                    <label>策略组名称 *</label>
+                    <input type="text" id="policy-name" placeholder="例如: 香港优选" required>
+                </div>
+
+                <!-- 策略类型 -->
+                <div class="form-group">
+                    <label>策略类型 *</label>
+                    <select id="policy-type" onchange="updatePolicyTypeFields()" required>
+                        <option value="urltest">URL-TEST (自动选择最快节点)</option>
+                        <option value="selector">SELECTOR (手动选择节点)</option>
+                        <option value="fallback">FALLBACK (故障转移)</option>
+                    </select>
+                </div>
+
+                <!-- 成员节点选择 -->
+                <div class="form-group">
+                    <label>成员节点 * <small style="color: #6b7280;">(至少选择2个，支持嵌套策略组)</small></label>
+                    <div id="policy-members" style="max-height: 300px; overflow-y: auto; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; background: #ffffff;">
+                        <div style="text-align: center; color: #888; padding: 20px;">
+                            <div class="loading-spinner" style="display: inline-block; width: 20px; height: 20px;"></div>
+                            <div style="margin-top: 10px;">加载中...</div>
+                        </div>
+                    </div>
+                    <small style="color: #6b7280; display: block; margin-top: 5px;">
+                        💡 提示: 可以选择普通节点或其他策略组，支持多层嵌套（如：策略组→策略组→节点）
+                    </small>
+                </div>
+
+                <!-- URL-TEST 配置 -->
+                <div id="urltest-fields" class="policy-type-fields">
+                    <div class="form-group">
+                        <label>测试 URL</label>
+                        <input type="text" id="urltest-url" placeholder="https://www.gstatic.com/generate_204" value="https://www.gstatic.com/generate_204">
+                        <small>用于测试节点可用性和延迟的 URL</small>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>测试间隔</label>
+                            <input type="text" id="urltest-interval" placeholder="3m" value="3m">
+                            <small>例如: 3m, 5m, 10m</small>
+                        </div>
+                        <div class="form-group">
+                            <label>容差 (ms)</label>
+                            <input type="number" id="urltest-tolerance" placeholder="50" value="50">
+                            <small>延迟差异小于此值不切换</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SELECTOR 配置 -->
+                <div id="selector-fields" class="policy-type-fields" style="display: none;">
+                    <div class="form-group">
+                        <label>默认节点</label>
+                        <select id="selector-default">
+                            <option value="">使用第一个成员节点</option>
+                        </select>
+                        <small>策略组启动时默认使用的节点</small>
+                    </div>
+                </div>
+
+                <!-- FALLBACK 配置 -->
+                <div id="fallback-fields" class="policy-type-fields" style="display: none;">
+                    <div class="form-group">
+                        <label>测试 URL</label>
+                        <input type="text" id="fallback-url" placeholder="https://www.gstatic.com/generate_204" value="https://www.gstatic.com/generate_204">
+                        <small>用于测试节点可用性的 URL</small>
+                    </div>
+                    <div class="form-group">
+                        <label>测试间隔</label>
+                        <input type="text" id="fallback-interval" placeholder="3m" value="3m">
+                        <small>例如: 3m, 5m, 10m</small>
+                    </div>
+                </div>
+
+                <!-- 高级选项 -->
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="policy-interrupt">
+                        <label>切换节点时中断现有连接</label>
+                    </div>
+                    <small>启用后，切换节点时会断开现有的连接并重新建立</small>
+                </div>
+
+                <!-- DNS 劫持选项 -->
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="policy-hijack-dns" checked>
+                        <label>启用 DNS 劫持</label>
+                    </div>
+                    <small>推荐开启，可以劫持 DNS 请求通过代理解析</small>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeModal('createPolicyGroupModal')">取消</button>
+                <button type="submit" class="btn btn-primary" id="policy-submit-btn">创建</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <!-- 创建/编辑节点模态框 -->
@@ -1155,25 +1336,81 @@ function translateStatus(status) {
     return statusMap[status] || status;
 }
 
-// 加载节点列表
-async function loadNodes() {
-    const tbody = document.getElementById('nodes-tbody');
-    const loading = document.getElementById('nodes-loading');
-    const table = document.getElementById('nodes-table');
+// 当前激活的 Tab ('normal' 或 'policy')
+let currentNodeTab = 'normal';
 
+// 策略组类型常量
+const POLICY_GROUP_TYPES = ['urltest', 'selector', 'fallback'];
+const NORMAL_NODE_TYPES = ['socks', 'vless', 'vmess', 'trojan'];
+
+// 判断是否为策略组
+function isPolicyGroup(node) {
+    return POLICY_GROUP_TYPES.includes(node.type);
+}
+
+// 判断是否为普通节点
+function isNormalNode(node) {
+    return NORMAL_NODE_TYPES.includes(node.type);
+}
+
+// 切换 Tab
+function switchNodeTab(tab) {
+    currentNodeTab = tab;
+
+    // 更新 Tab 按钮状态
+    document.getElementById('normal-nodes-tab').classList.toggle('active', tab === 'normal');
+    document.getElementById('policy-groups-tab').classList.toggle('active', tab === 'policy');
+
+    // 显示/隐藏对应的表格
+    document.getElementById('normal-nodes-card').style.display = tab === 'normal' ? 'block' : 'none';
+    document.getElementById('policy-groups-card').style.display = tab === 'policy' ? 'block' : 'none';
+
+    // 显示/隐藏对应的创建按钮
+    document.getElementById('create-normal-btn').style.display = tab === 'normal' ? 'inline-block' : 'none';
+    document.getElementById('create-policy-btn').style.display = tab === 'policy' ? 'inline-block' : 'none';
+}
+
+// 加载节点列表（分别加载普通节点和策略组）
+async function loadNodes() {
     try {
         const res = await authFetch(`${API_BASE}/nodes`);
         const data = await res.json();
 
-        loading.style.display = 'none';
-        table.style.display = 'table';
-
-        if (!data.data || data.data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #9ca3af;">暂无节点</td></tr>';
-            return;
+        if (!data.data) {
+            data.data = [];
         }
 
-        tbody.innerHTML = data.data.map(node => {
+        // 分类节点
+        const normalNodes = data.data.filter(isNormalNode);
+        const policyGroups = data.data.filter(isPolicyGroup);
+
+        // 加载普通节点表格
+        loadNormalNodesTable(normalNodes);
+
+        // 加载策略组表格
+        loadPolicyGroupsTable(policyGroups);
+    } catch (e) {
+        console.error('加载节点失败:', e);
+        document.getElementById('normal-nodes-loading').textContent = '加载失败';
+        document.getElementById('policy-groups-loading').textContent = '加载失败';
+    }
+}
+
+// 加载普通节点表格
+function loadNormalNodesTable(nodes) {
+    const tbody = document.getElementById('normal-nodes-tbody');
+    const loading = document.getElementById('normal-nodes-loading');
+    const table = document.getElementById('normal-nodes-table');
+
+    loading.style.display = 'none';
+    table.style.display = 'table';
+
+    if (nodes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #9ca3af;">暂无节点</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = nodes.map(node => {
             let config = {};
             try {
                 config = JSON.parse(node.config);
@@ -1263,9 +1500,421 @@ async function loadNodes() {
                 </td>
             </tr>
         `}).join('');
+}
+
+// 加载策略组表格
+function loadPolicyGroupsTable(policyGroups) {
+    const tbody = document.getElementById('policy-groups-tbody');
+    const loading = document.getElementById('policy-groups-loading');
+    const table = document.getElementById('policy-groups-table');
+
+    loading.style.display = 'none';
+    table.style.display = 'table';
+
+    if (policyGroups.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #9ca3af;">暂无策略组</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = policyGroups.map(node => {
+        let config = {};
+        let memberNodeIds = [];
+        try {
+            config = JSON.parse(node.config);
+            memberNodeIds = config.nodes || [];
+        } catch (e) {}
+
+        // 显示成员节点ID列表
+        const membersDisplay = memberNodeIds.length > 0
+            ? memberNodeIds.map(id => `#${id}`).join(', ')
+            : '-';
+
+        // 计算延迟显示（使用HTTP延迟作为主要指标）
+        let latencyHtml = '';
+        if (node.status !== 'running') {
+            latencyHtml = '<span class="latency latency-unavailable" style="cursor: not-allowed;">-</span>';
+        } else {
+            const httpLatency = node.http_latency || 0;
+            let latencyColor, latencyIcon, latencyStatus;
+
+            if (httpLatency === 0) {
+                latencyColor = '#ef4444';
+                latencyIcon = '🔴';
+                latencyStatus = '离线';
+            } else if (httpLatency > 2000) {
+                latencyColor = '#f97316';
+                latencyIcon = '🟠';
+                latencyStatus = '较慢';
+            } else if (httpLatency > 1000) {
+                latencyColor = '#eab308';
+                latencyIcon = '🟡';
+                latencyStatus = '一般';
+            } else {
+                latencyColor = '#22c55e';
+                latencyIcon = '🟢';
+                latencyStatus = '良好';
+            }
+
+            latencyHtml = `
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <span
+                        class="latency-indicator"
+                        onclick="openLatencyDetail(${node.id}, event)"
+                        style="
+                            cursor: pointer;
+                            padding: 4px 10px;
+                            border-radius: 12px;
+                            background: ${latencyColor}15;
+                            border: 1.5px solid ${latencyColor};
+                            color: ${latencyColor};
+                            font-size: 12px;
+                            font-weight: 600;
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 4px;
+                            transition: all 0.2s;
+                        "
+                        onmouseover="this.style.transform='scale(1.05)'"
+                        onmouseout="this.style.transform='scale(1)'"
+                        title="点击查看详细延迟信息"
+                    >
+                        <span>${httpLatency > 0 ? httpLatency + 'ms' : latencyStatus}</span>
+                    </span>
+                </div>
+            `;
+        }
+
+        return `
+        <tr>
+            <td>${node.id}</td>
+            <td><strong>${node.name}</strong></td>
+            <td>${node.type.toUpperCase()}</td>
+            <td><code style="font-size: 11px;">${membersDisplay}</code></td>
+            <td>${node.tun_name || '-'}</td>
+            <td><code>${node.table_id}</code></td>
+            <td>${latencyHtml}</td>
+            <td><span class="status status-${node.status}">${translateStatus(node.status)}</span></td>
+            <td>
+                <div class="actions">
+                    ${node.status === 'running'
+                        ? `<button class="btn btn-sm btn-warning" onclick="stopNode(${node.id})">停止</button>`
+                        : `<button class="btn btn-sm btn-success" onclick="startNode(${node.id})">启动</button>`
+                    }
+                    <button class="btn btn-sm" onclick="restartNode(${node.id})">重启</button>
+                    <button class="btn btn-sm" onclick="viewNode(${node.id}, '${node.name}')">查看</button>
+                    <button class="btn btn-sm" onclick="editPolicyGroup(${node.id})">编辑</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteNode(${node.id}, '${node.name}')">删除</button>
+                </div>
+            </td>
+        </tr>
+    `}).join('');
+}
+
+// ===== 策略组管理模块 =====
+
+// 更新策略类型字段显示
+function updatePolicyTypeFields() {
+    const type = document.getElementById('policy-type').value;
+
+    // 隐藏所有字段
+    document.querySelectorAll('.policy-type-fields').forEach(f => f.style.display = 'none');
+
+    // 显示对应类型的字段
+    const fields = document.getElementById(type + '-fields');
+    if (fields) {
+        fields.style.display = 'block';
+    }
+
+    // 更新默认节点下拉框（selector类型使用）
+    if (type === 'selector') {
+        updateSelectorDefaultOptions();
+    }
+}
+
+// 更新 selector 默认节点选项
+function updateSelectorDefaultOptions() {
+    const defaultSelect = document.getElementById('selector-default');
+    const checkedNodes = document.querySelectorAll('#policy-members input[type="checkbox"]:checked');
+
+    // 清空并重新填充
+    defaultSelect.innerHTML = '<option value="">使用第一个成员节点</option>';
+
+    checkedNodes.forEach(checkbox => {
+        const nodeId = checkbox.value;
+        const nodeName = checkbox.getAttribute('data-name');
+        const option = document.createElement('option');
+        option.value = nodeId;
+        option.textContent = `${nodeName} (#${nodeId})`;
+        defaultSelect.appendChild(option);
+    });
+}
+
+// 加载策略组成员节点列表（包括普通节点和策略组）
+async function loadPolicyMembers(excludeId = null, selectedIds = []) {
+    const container = document.getElementById('policy-members');
+
+    try {
+        const res = await authFetch(`${API_BASE}/nodes`);
+        const data = await res.json();
+
+        if (!data.data || data.data.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: #888;">暂无可用节点</div>';
+            return;
+        }
+
+        // 排除当前编辑的策略组自身（避免自我引用）
+        const availableNodes = excludeId
+            ? data.data.filter(node => node.id !== excludeId)
+            : data.data;
+
+        if (availableNodes.length === 0) {
+            container.innerHTML = '<div style="text-align: center; color: #888;">暂无可用节点<br><small>请先创建节点或策略组</small></div>';
+            return;
+        }
+
+        // 分类显示：普通节点和策略组
+        const normalNodes = availableNodes.filter(node => {
+            const nodeType = node.type || (node.ProxyNode && node.ProxyNode.type);
+            return NORMAL_NODE_TYPES.includes(nodeType);
+        });
+        const policyGroups = availableNodes.filter(node => {
+            const nodeType = node.type || (node.ProxyNode && node.ProxyNode.type);
+            return POLICY_GROUP_TYPES.includes(nodeType);
+        });
+
+        let html = '';
+
+        // 显示普通节点
+        if (normalNodes.length > 0) {
+            html += '<div style="font-weight: 600; color: #374151; margin-bottom: 8px; font-size: 13px;">📦 普通节点</div>';
+            html += normalNodes.map(node => {
+                const checked = selectedIds.includes(node.id) ? 'checked' : '';
+                const escapedName = (node.name || '').replace(/"/g, '&quot;');
+                return `
+                    <div style="padding: 8px; border-bottom: 1px solid #e5e7eb; background: #f9fafb; margin-bottom: 4px; border-radius: 4px;">
+                        <label style="display: flex; align-items: center; cursor: pointer; user-select: none;">
+                            <input
+                                type="checkbox"
+                                value="${node.id}"
+                                data-name="${escapedName}"
+                                onchange="updateSelectorDefaultOptions()"
+                                ${checked}
+                                style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                            <span style="flex: 1;">
+                                <strong style="color: #111827;">${node.name}</strong>
+                                <span style="color: #6b7280; font-size: 13px;"> (${node.type.toUpperCase()}, ID: ${node.id})</span>
+                            </span>
+                        </label>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 显示策略组
+        if (policyGroups.length > 0) {
+            html += '<div style="font-weight: 600; color: #374151; margin: 12px 0 8px 0; font-size: 13px;">🔀 策略组</div>';
+            html += policyGroups.map(node => {
+                const checked = selectedIds.includes(node.id) ? 'checked' : '';
+                const escapedName = (node.name || '').replace(/"/g, '&quot;');
+                return `
+                    <div style="padding: 8px; border-bottom: 1px solid #e5e7eb; background: #fef3c7; margin-bottom: 4px; border-radius: 4px;">
+                        <label style="display: flex; align-items: center; cursor: pointer; user-select: none;">
+                            <input
+                                type="checkbox"
+                                value="${node.id}"
+                                data-name="${escapedName}"
+                                onchange="updateSelectorDefaultOptions()"
+                                ${checked}
+                                style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                            <span style="flex: 1;">
+                                <strong style="color: #92400e;">${node.name}</strong>
+                                <span style="color: #78350f; font-size: 13px;"> (${node.type.toUpperCase()}, ID: ${node.id})</span>
+                            </span>
+                        </label>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        container.innerHTML = html;
     } catch (e) {
-        console.error('加载节点失败:', e);
-        loading.textContent = '加载失败';
+        console.error('加载成员节点失败:', e);
+        container.innerHTML = `
+            <div style="text-align: center; color: #ef4444; padding: 20px;">
+                <div>加载失败</div>
+                <small style="color: #6b7280;">${e.message}</small>
+            </div>
+        `;
+    }
+}
+
+// 显示创建策略组模态框
+async function showCreatePolicyGroupModal() {
+    // 设置为创建模式
+    document.getElementById('policy-modal-title').textContent = '创建策略组';
+    document.getElementById('policy-submit-btn').textContent = '创建';
+    document.getElementById('policy-id').value = '';
+
+    // 重置表单
+    document.getElementById('createPolicyGroupModal').querySelector('form').reset();
+
+    // 设置默认值
+    document.getElementById('policy-type').value = 'urltest';
+    document.getElementById('urltest-url').value = 'https://www.gstatic.com/generate_204';
+    document.getElementById('urltest-interval').value = '3m';
+    document.getElementById('urltest-tolerance').value = '50';
+    document.getElementById('fallback-url').value = 'https://www.gstatic.com/generate_204';
+    document.getElementById('fallback-interval').value = '3m';
+    document.getElementById('policy-hijack-dns').checked = true;
+
+    // 更新字段显示
+    updatePolicyTypeFields();
+
+    // 加载成员节点
+    await loadPolicyMembers();
+
+    openModal('createPolicyGroupModal');
+}
+
+// 编辑策略组
+async function editPolicyGroup(id) {
+    try {
+        const res = await authFetch(`${API_BASE}/nodes/${id}`);
+        const data = await res.json();
+
+        if (data.code === 0 && data.data) {
+            const node = data.data;
+            const config = JSON.parse(node.config);
+
+            // 设置为编辑模式
+            document.getElementById('policy-modal-title').textContent = '编辑策略组';
+            document.getElementById('policy-submit-btn').textContent = '保存';
+            document.getElementById('policy-id').value = node.id;
+
+            // 填充基本信息
+            document.getElementById('policy-name').value = node.name;
+            document.getElementById('policy-type').value = node.type;
+            document.getElementById('policy-hijack-dns').checked = node.hijack_dns !== false;
+
+            // 填充配置
+            if (node.type === 'urltest') {
+                document.getElementById('urltest-url').value = config.url || 'https://www.gstatic.com/generate_204';
+                document.getElementById('urltest-interval').value = config.interval || '3m';
+                document.getElementById('urltest-tolerance').value = config.tolerance || 50;
+            } else if (node.type === 'selector') {
+                document.getElementById('selector-default').value = config.default || '';
+            } else if (node.type === 'fallback') {
+                document.getElementById('fallback-url').value = config.url || 'https://www.gstatic.com/generate_204';
+                document.getElementById('fallback-interval').value = config.interval || '3m';
+            }
+
+            document.getElementById('policy-interrupt').checked = config.interrupt_exist_connections || false;
+
+            // 更新字段显示
+            updatePolicyTypeFields();
+
+            // 加载成员节点（排除自身，并选中已有成员）
+            await loadPolicyMembers(node.id, config.nodes || []);
+
+            // 如果是 selector，更新默认节点选项
+            if (node.type === 'selector') {
+                updateSelectorDefaultOptions();
+                document.getElementById('selector-default').value = config.default || '';
+            }
+
+            openModal('createPolicyGroupModal');
+        } else {
+            showToast('获取策略组信息失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        console.error('编辑策略组失败:', e);
+        showToast('获取策略组信息失败', 'error');
+    }
+}
+
+// 保存策略组
+async function savePolicyGroup(e) {
+    e.preventDefault();
+
+    const policyId = document.getElementById('policy-id').value;
+    const isEdit = policyId !== '';
+
+    // 获取基本信息
+    const name = document.getElementById('policy-name').value.trim();
+    if (!name) {
+        showToast('请填写策略组名称', 'error');
+        return;
+    }
+
+    const type = document.getElementById('policy-type').value;
+
+    // 获取成员节点
+    const checkedNodes = document.querySelectorAll('#policy-members input[type="checkbox"]:checked');
+    const memberIds = Array.from(checkedNodes).map(cb => parseInt(cb.value));
+
+    if (memberIds.length < 2) {
+        showToast('请至少选择2个成员节点', 'error');
+        return;
+    }
+
+    // 构建策略组配置
+    const policyConfig = {
+        type: type,
+        nodes: memberIds,
+        interrupt_exist_connections: document.getElementById('policy-interrupt').checked
+    };
+
+    // 根据类型添加特定配置
+    if (type === 'urltest') {
+        policyConfig.url = document.getElementById('urltest-url').value || 'https://www.gstatic.com/generate_204';
+        policyConfig.interval = document.getElementById('urltest-interval').value || '3m';
+        const tolerance = parseInt(document.getElementById('urltest-tolerance').value);
+        if (tolerance > 0) {
+            policyConfig.tolerance = tolerance;
+        }
+    } else if (type === 'selector') {
+        const defaultNode = document.getElementById('selector-default').value;
+        if (defaultNode) {
+            policyConfig.default = parseInt(defaultNode);
+        }
+    } else if (type === 'fallback') {
+        policyConfig.url = document.getElementById('fallback-url').value || 'https://www.gstatic.com/generate_204';
+        policyConfig.interval = document.getElementById('fallback-interval').value || '3m';
+    }
+
+    // 构建请求数据
+    const requestBody = {
+        name: name,
+        type: type,
+        config: JSON.stringify(policyConfig),
+        hijack_dns: document.getElementById('policy-hijack-dns').checked,
+        enabled: true
+    };
+
+    const url = isEdit ? `${API_BASE}/nodes/${policyId}` : `${API_BASE}/nodes`;
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const res = await authFetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+
+        const data = await res.json();
+        if (data.code === 0) {
+            showToast(
+                isEdit ? '策略组已更新，请重启以应用新配置' : `策略组创建成功！ID: ${data.data.id}`,
+                'success'
+            );
+            closeModal('createPolicyGroupModal');
+            loadNodes();
+        } else {
+            showToast((isEdit ? '更新' : '创建') + '失败: ' + data.message, 'error');
+        }
+    } catch (e) {
+        console.error('保存策略组失败:', e);
+        showToast('保存失败: ' + e.message, 'error');
     }
 }
 

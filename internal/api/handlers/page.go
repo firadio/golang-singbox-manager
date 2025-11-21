@@ -39,9 +39,7 @@ func (h *PageHandler) RenderNodes(c *gin.Context) {
 		"Title":       "代理节点",
 		"CurrentPage": "nodes",
 		"PageTitle":   "代理节点管理",
-		"PageActions": []PageAction{
-			{Text: "+ 创建节点", Class: "btn btn-primary", OnClick: template.JS("showCreateNodeModal()")},
-		},
+		// PageActions 已移除，按钮现在在 Tab 区域根据当前 Tab 动态显示
 	})
 }
 
