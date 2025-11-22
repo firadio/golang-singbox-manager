@@ -107,7 +107,7 @@ func (c *Client) AddNATRule(mapping *storage.PortMapping, ruleType string) error
 	comment := fmt.Sprintf("%s%d", commentPrefix, mapping.ID)
 
 	attrs := map[string]string{
-		"place-before":  "0",
+		"place-before":  "1",
 		"chain":         "dstnat",
 		"action":        "dst-nat",
 		"protocol":      mapping.Protocol,
@@ -146,7 +146,7 @@ func (c *Client) AddMasqueradeRule(mapping *storage.PortMapping) error {
 	comment := fmt.Sprintf("%s%d-masq", commentPrefix, mapping.ID)
 
 	attrs := map[string]string{
-		"place-before": "0",
+		"place-before": "1",
 		"chain":        "srcnat",
 		"action":       "masquerade",
 		"protocol":     mapping.Protocol,
